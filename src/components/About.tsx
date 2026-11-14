@@ -16,8 +16,8 @@ export function About() {
       <p>
         The map is GoblinLife.org&rsquo;s map of Mudwick Isle{art.version ? ` (version ${art.version})` : ''}, painted with AI image models and laid out by
         GoblinLife&rsquo;s own code, and loaded from GoblinLife.org as it is updated{art.source === 'mask' ? '; until it arrives, the isle is drawn as plain land and sea' : ''}. Its districts are whole blocks of the city&rsquo;s street grid. Polling places sit on a grid over the {DISTRICTS.length} districts and follow people, not land: each
-        district gets places in proportion to its residents, sited where they live, so the empty headland and the mushroom woods
-        get one each. The resident counts are working figures (about {Math.round(TOTAL_POPULATION / 1000)},000 in all), not a census.
+        district gets places in proportion to its residents, sited where they live. Thin country still gets a handful of small
+        halls (Gunner&rsquo;s Head, the mushroom woods, the Low Marsh), never as many as it has room for. The resident counts are working figures (about {Math.round(TOTAL_POPULATION / 1000)},000 in all), not a census.
         Each district counts its own ballots, so a district line is also a counting-house line. Who lives where follows the isle: pixies
         under the mushrooms, gnomes in the Revenue District, trolls in the wet south, dwarves in the Works, Leafies on the
         allotments and the hills. The <em>Enclaves</em> slider sets how strongly they keep to those places. Each district&rsquo;s

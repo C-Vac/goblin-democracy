@@ -258,13 +258,16 @@ export function runElection(cfg: Config, opts: RunOptions = {}): ElectionResult 
     addC('tabulator', 'technician', f, null, node.i, 0.03, false);
     const rate = 0.05 + 0.04 * r();
     for (const i of node.precincts) {
+      let movedVotes = 0;
       for (let j = 0; j < C; j++) {
         if (j === f) continue;
         const m = Math.round(machine[i][j] * rate);
         machine[i][j] -= m;
         machine[i][f] += m;
+        movedVotes += m;
       }
-      tampered[i].add('tabulator');
+      // A hall so small the nudge rounds to nothing has not been tampered with.
+      if (movedVotes > 0) tampered[i].add('tabulator');
     }
     log('count', `${theOf(node.name, true)} machines move ${(rate * 100).toFixed(0)}% of the opposition's votes to ${cand(f)}.`, 'attack', { node: node.i });
   }

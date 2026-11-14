@@ -75,9 +75,10 @@ from a named stream, so attacks never change the honest voters underneath.
 #### Story 1.1a: Polling places follow people — ✅ Completed (2026-11-14); figures 🔄 pending canon
 Owner 2026-11-14: Pixie Village and Gunner's Head had far too many polling places; almost nobody lives there. Each district
 now has a resident count (`population` in `engine/mudwick.ts`) and gets polling places in proportion to it (about
-80/150/260/440 places in all for S/M/L/XL, at least one per district, capped by its cells), kept on the cells with the
+80/150/260/440 places in all for S/M/L/XL; every district at least 3/5/8/12 (owner 2026-11-14: "1-5 is too few, but keep
+it less than full"), never more than half its cells; capped by its cells), kept on the cells with the
 most dwellings nearby (the map room's per-block `settled` counts, synced with the outlines; Gaussian pull, σ 2.5% of the
-map width), else nearest the district's label. Electorate per place = 80% of residents / places. The counts are **working figures, not
+map width), else nearest the district's label. Electorate per place = 80% of residents / places (at least 40). The counts are **working figures, not
 canon**: canon has no census of Mudwick, and the lore room owns that. Proposed (residents):
 
 | District | Residents | Why |
@@ -153,8 +154,9 @@ from other factions 25% (illustrative; stated on the About page).
 (Klimek), last digits (Beber and Scacco), whole-number percentages (Kobak et al.), outliers against neighbours,
 mail-ballot anomalies, jumps between counting houses, second-digit Benford (marked contested). Outlier thresholds
 (`TUNING`) were calibrated so the honest default election fails each test about 1 run in 100. Re-measured on the map room's
-districts with per-block dwellings (dc45203), 2026-11-14 (200 clean runs per size, S/M/L): any test failing 1% (S),
-2% (M), 2% (L); no single test above 1.5%.
+districts with the thin-country place floor, 2026-11-14: any test failing 2% (S), 1% (M), 2% (L) (200 clean runs each),
+5% (XL, 400 runs). No single test above 1.5% except the mail test at about 3% on the XL grid, as before the floor
+(2.7% without it); its flags fall in the city and the off-map districts, not the thin ones.
 
 #### Story 1.5: Audit math — ✅ Completed
 `engine/audit.ts`. BRAVO ballot-polling audit, fixed-rate or sample-until-confident; escalation to a full hand count;

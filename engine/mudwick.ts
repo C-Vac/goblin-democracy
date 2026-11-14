@@ -181,6 +181,11 @@ const SETTLE_SIGMA = 2.5;
 export const GRID_COLUMNS = { S: 24, M: 34, L: 46, XL: 60 } as const;
 /** About how many polling places the whole electorate gets at each grid size. */
 const PLACE_TARGET: Record<number, number> = { 24: 80, 34: 150, 46: 260, 60: 440 };
+/**
+ * The fewest polling places any district gets at each size, however few live there: thin country
+ * still votes in more than one hall. Never more than half a district's room, so it is never full.
+ */
+const PLACE_FLOOR: Record<number, number> = { 24: 3, 34: 5, 46: 8, 60: 12 };
 export const TOTAL_POPULATION = DISTRICTS.reduce((a, d) => a + d.population, 0);
 
 export function inPoly([x, y]: [number, number], poly: Array<[number, number]>): boolean {
@@ -256,13 +261,15 @@ export function gridCells(columns: number): Grid {
   }
   // Polling places follow people: each district keeps as many cells as its share of residents earns,
   // the ones where the map draws the most dwellings nearby (the map room's per-block counts), or, with
-  // no counts, the ones nearest its settle point. At least one each; a crowded district is capped by its cells.
+  // no counts, the ones nearest its settle point. At least PLACE_FLOOR each (thin country included); a crowded
+  // district is capped by its cells.
   const target = PLACE_TARGET[columns] ?? Math.round(cells.length * 0.6);
   const keep = new Set<Cell>();
   const dist2 = (ax: number, ay: number, bx: number, by: number) => (ax - bx) ** 2 + ((ay - by) / ASPECT) ** 2;
   const places = DISTRICTS.map((d, k) => {
     const mine = cells.filter((c) => c.district === k);
-    const want = Math.max(1, Math.min(mine.length, Math.round((d.population / TOTAL_POPULATION) * target)));
+    const floor = Math.min(PLACE_FLOOR[columns] ?? 1, Math.floor(mine.length / 2));
+    const want = Math.max(1, floor, Math.min(mine.length, Math.round((d.population / TOTAL_POPULATION) * target)));
     const [sx, sy] = d.settle ?? d.label;
     const blocks = d.settled ?? [];
     const sigma2 = 2 * SETTLE_SIGMA ** 2;

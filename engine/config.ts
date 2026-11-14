@@ -72,7 +72,7 @@ export const PRESETS: Preset[] = [
     id: 'looks-guilty', name: 'A clean election that looks guilty', kind: 'sandbox',
     blurb: 'Nobody cheats. The numbers say otherwise.',
     notice: 'Species that vote as a bloc in tight enclaves make whole districts look stuffed. Nobody touched a ballot; check the Truth view. Real elections trip these tests by chance too.',
-    config: make((c) => { c.seed = 64; c.size = 'XL'; c.clustering = 100; c.species = { goblin: 30, gnome: 20, troll: 20, pixie: 10, dwarf: 10, leafy: 10 }; }),
+    config: make((c) => { c.seed = 30; c.size = 'XL'; c.clustering = 100; c.species = { goblin: 30, gnome: 20, troll: 20, pixie: 10, dwarf: 10, leafy: 10 }; }),
   },
   {
     id: 'four-clerks', name: 'Four corrupt clerks', kind: 'sandbox',
@@ -85,7 +85,7 @@ export const PRESETS: Preset[] = [
     blurb: 'Nobody touches a ballot. The boundary commission does the work.',
     notice: 'The winner is whoever takes the most districts. A one-faction commission moves polling places across district lines until the Council\u2019s candidate wins more districts with fewer votes. Compare the Reported and Honest maps, then raise mixed staffing to put the other side on the commission.',
     config: make((c) => {
-      c.seed = 4;
+      c.seed = 1;
       c.rule = 'districts';
       c.attacks.gerrymander = 70;
       c.safeguards = { ...c.safeguards, mixedStaffing: 0, courts: 40 };
@@ -144,7 +144,7 @@ export const PRESETS: Preset[] = [
     notice: 'Without paper, no audit or recount can check a machine. This preset adds tampering to show the blind spot; it does not claim any real machine was tampered with.',
     source: 'Paperless direct-recording electronic machines were common in US jurisdictions into the 2010s; security reviews criticised them because they leave nothing to audit.',
     config: make((c) => {
-      c.seed = 2;
+      c.seed = 4;
       c.attacks.tabulator = 40;
       c.safeguards = { ...c.safeguards, paper: 0, auditRate: 0 };
     }),
@@ -155,7 +155,7 @@ export const PRESETS: Preset[] = [
     notice: 'A small tabulator nudge turns a narrow loss into a narrow win. The audit samples until it is confident, finds the paper disagrees, and the hand count puts it back.',
     source: 'Colorado ran the first statewide risk-limiting audits after its 2017 election. Ballot-polling math: Lindeman, Stark and Yates (2012).',
     config: make((c) => {
-      c.seed = 2;
+      c.seed = 21;
       c.species = { goblin: 40, gnome: 16, troll: 12, pixie: 10, dwarf: 12, leafy: 10 };
       c.attacks.tabulator = 25;
       c.rla = true;

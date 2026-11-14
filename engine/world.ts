@@ -114,7 +114,7 @@ export function buildWorld(cfg: Config): World {
     const ws = weights.reduce((a, b) => a + b, 0) || 1;
     const mix = weights.map((x) => x / ws);
     // Residents of voting age (about 80%), shared between the district's polling places.
-    const eligible = Math.max(60, Math.round(((D.population * 0.8) / Math.max(1, grid.places[district])) * Math.exp(0.3 * normal(r))));
+    const eligible = Math.max(40, Math.round(((D.population * 0.8) / Math.max(1, grid.places[district])) * Math.exp(0.3 * normal(r))));
 
     const vr = stream(cfg.seed, 'vote', i);
     const shock = 0.07 * normal(vr);

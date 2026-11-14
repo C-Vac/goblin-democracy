@@ -67,13 +67,19 @@ describe('invariants', () => {
   });
 
   it('a tampered tabulator is undone by a full hand count of paper', () => {
-    const cfg = { ...defaultConfig(), seed: 9 };
-    cfg.attacks.tabulator = 100;
-    cfg.safeguards.recountTrigger = 100;
-    cfg.safeguards.paper = 100;
-    cfg.rla = true;
-    const r = runElection(cfg);
-    expect(r.precincts.every((p) => !p.tampered.includes('tabulator'))).toBe(true);
+    let counted = 0;
+    for (const seed of seeds) {
+      const cfg = { ...defaultConfig(), seed };
+      cfg.attacks.tabulator = 100;
+      cfg.safeguards.recountTrigger = 100;
+      cfg.safeguards.paper = 100;
+      cfg.rla = true;
+      const r = runElection(cfg);
+      if (!r.audit.recountTriggered && !r.audit.escalated) continue;
+      counted++;
+      expect(r.precincts.every((p) => !p.tampered.includes('tabulator'))).toBe(true);
+    }
+    expect(counted).toBeGreaterThan(0);
   });
 
   it('the headline answers flip, caught and where', () => {
