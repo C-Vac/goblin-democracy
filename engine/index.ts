@@ -7,3 +7,4 @@ export { runMonteCarlo, type MonteCarloSummary, type DetectorRate } from './mont
 export { bravoAsn } from './audit';
 export { parseCsv, resultToCsv, CSV_TEMPLATE } from './csv';
 export { crewPhrase } from './headline';
+export { MAP, DISTRICTS, ASPECT, TOTAL_POPULATION, type District } from './mudwick';

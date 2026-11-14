@@ -1,3 +1,5 @@
 node_modules
 dist
 *.log
+public/map-local/
+.env.local

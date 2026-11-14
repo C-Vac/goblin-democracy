@@ -4,6 +4,7 @@ import { monteCarloInWorker } from '../engineClient';
 import { pct, Tile } from './ui';
 
 const VIA: Record<string, string> = {
+  commission: 'Commission',
   'staff-refusal': 'Staff refused', observer: 'Observer', reconciliation: 'Reconciliation', 'tape-mismatch': 'Tape photo',
   'roll-check': 'Roll check', audit: 'Audit', recount: 'Recount', court: 'Court', leak: 'Leak', forensics: 'Forensics',
 };
@@ -44,7 +45,7 @@ export function MonteCarloTab({ cfg }: { cfg: Config }) {
       <section className="card">
         <h2>One run is an anecdote</h2>
         <p className="small" style={{ marginTop: 0 }}>
-          Runs the settings from the Simulate tab on many islands, each beside the same island with every attack switched off,
+          Runs the settings from the Simulate tab on many elections, each with new voters and staff, and each beside the same election with every attack switched off,
           to estimate the chance the result flips, the chance it is caught, and how often each forensic test cries wolf.
         </p>
         <p className="small muted">Attacks on: {active.length ? active.join(', ') : 'none (every run is clean)'}.</p>
@@ -100,7 +101,7 @@ export function MonteCarloTab({ cfg }: { cfg: Config }) {
 
           <section className="card">
             <h2>Forensic tests: hits and false alarms</h2>
-            <p className="small muted" style={{ marginTop: 0 }}>How often each test failed on the rigged elections, and on the same islands with nobody cheating.</p>
+            <p className="small muted" style={{ marginTop: 0 }}>How often each test failed on the rigged elections, and on the same elections with nobody cheating.</p>
             <div className="table-wrap">
               <table className="data">
                 <thead><tr><th>Test</th><th style={{ width: '35%' }}>Fails when rigged</th><th style={{ width: '35%' }}>Fails when clean</th></tr></thead>

@@ -1,6 +1,9 @@
 /** Shared types for the engine. The engine is pure TypeScript: no DOM, no React, worker-safe. */
 
-export type AttackId = 'stuffing' | 'impersonation' | 'harvesting' | 'tabulator' | 'canvass' | 'refusal';
+export type AttackId = 'gerrymander' | 'stuffing' | 'impersonation' | 'harvesting' | 'tabulator' | 'canvass' | 'refusal';
+
+/** How the winner is chosen: most votes on the whole isle, or most districts won. */
+export type WinRule = 'popular' | 'districts';
 export type SafeguardId =
   | 'paper'
   | 'reconciliation'
@@ -12,10 +15,17 @@ export type SafeguardId =
 
 export type GridSize = 'S' | 'M' | 'L' | 'XL';
 
+export type PartyId = 'council' | 'gallery' | 'independent' | 'minor-a' | 'minor-b';
+export type CandidateType = 'incumbent' | 'aligned' | 'reformer' | 'radical' | 'protest';
+
 export interface Candidate {
   name: string;
   /** Faction (party stand-in) shown on the ballot. */
   faction: string;
+  /** Which bloc the faction belongs to: sets the candidate's colour on the map. */
+  party: PartyId;
+  /** What kind of candidate: changes who votes for them and, for an incumbent, who runs the polls. */
+  type: CandidateType;
   /** Council loyalty: -1 (against the Council) to +1 (for it). */
   x: number;
   /** Who gets a vote: -1 (goblins only) to +1 (every species, houseplants included). */
@@ -47,6 +57,8 @@ export interface Config {
   rla: boolean;
   /** Risk limit for the audit, in percent. */
   riskLimit: number;
+  /** Most votes wins, or most districts wins. Gerrymandering only flips results under the second. */
+  rule: WinRule;
 }
 
 export interface Species {
@@ -72,6 +84,7 @@ export type Phase =
 
 /** Where a catch happened: the safeguard or mechanism that caught it. */
 export type CatchVia =
+  | 'commission'
   | 'staff-refusal'
   | 'observer'
   | 'reconciliation'
@@ -116,8 +129,16 @@ export interface PrecinctStatic {
   i: number;
   col: number;
   row: number;
+  /** Centre on the map, % of the bake. */
+  x: number;
+  y: number;
+  /** District id (engine/mudwick.ts): where the polling place is on the map. */
+  district: string;
   name: string;
+  /** The counting house it reports to. Gerrymandering can move it away from `homeNode`. */
   node: number;
+  /** Its own district's counting house, on the fair map. */
+  homeNode: number;
   eligible: number;
   registered: number;
   speciesShare: number[];
@@ -159,11 +180,17 @@ export interface PrecinctResult {
 export interface NodeInfo {
   i: number;
   name: string;
+  /** District id (engine/mudwick.ts): every district counts its own ballots. */
+  district: string;
+  kind: 'city' | 'country' | 'base' | 'abroad' | 'aliens';
   precincts: number[];
+  /** Where the district is lettered, % of the bake. */
   cx: number;
   cy: number;
   meanOversight: number;
   canvassBoard: number[];
+  /** The board wrote in its own numbers and nobody exposed it. */
+  colluded?: boolean;
 }
 
 export interface AuditResult {
@@ -219,12 +246,17 @@ export interface Tally {
   totals: number[];
   winner: number;
   ballots: number;
+  /** Districts won by each candidate (plurality in each counting house). */
+  seats: number[];
 }
 
 export interface ElectionResult {
   config: Config;
   cols: number;
   rows: number;
+  /** Polling-place cell size, % of the bake. */
+  cw: number;
+  ch: number;
   precincts: PrecinctResult[];
   nodes: NodeInfo[];
   honest: Tally;
@@ -238,4 +270,6 @@ export interface ElectionResult {
   forensics: ForensicReport;
   headline: Headline;
   insular: number;
+  /** Polling places the boundary commission moved into another district. */
+  redrawn: number;
 }

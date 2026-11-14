@@ -8,7 +8,7 @@ import { DetectorList, ForensicCharts } from './components/Forensics';
 import { IsleMap, MAP_MODES, type MapMode } from './components/IsleMap';
 import { MonteCarloTab } from './components/MonteCarloTab';
 import { drawResultCard } from './components/ResultCard';
-import { int, pct } from './components/ui';
+import { int, partyVars, pct } from './components/ui';
 import { Verdict } from './components/Verdict';
 import { runInWorker } from './engineClient';
 
@@ -106,7 +106,7 @@ export function App() {
   const leaderName = result ? result.config.candidates[result.canvassed.winner].name : '';
 
   return (
-    <div className="page">
+    <div className="page" style={partyVars(cfg.candidates)}>
       <header className="topbar">
         <div className="brand">
           <img src="/democracy/ballot.svg" alt="" />

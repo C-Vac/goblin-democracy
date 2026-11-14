@@ -1,6 +1,6 @@
 /** The fixed parts of Mudwick Isle: species, ballots, attack and safeguard descriptions. */
 
-import type { AttackId, Candidate, Phase, SafeguardId, Species } from './types';
+import type { AttackId, Candidate, CandidateType, PartyId, Phase, SafeguardId, Species } from './types';
 
 export const PHASE_ORDER: Phase[] = ['registration', 'mail', 'election-day', 'count', 'canvass', 'audit', 'certification', 'aftermath'];
 
@@ -12,6 +12,27 @@ export const SPECIES: Species[] = [
   { id: 'dwarf', name: 'Dwarves', x: -0.1, y: -0.6, turnout: 0.66, registration: 0.88, mail: 1.1 },
   // Goblins the Council reclassified as houseplants. Still on the rolls, mostly.
   { id: 'leafy', name: 'Leafies', x: -0.55, y: 0.95, turnout: 0.4, registration: 0.62, mail: 2.0 },
+];
+
+export interface PartyInfo { id: PartyId; name: string; colour: string }
+
+/** Blocs, in colour order. Council purple, Gallery green, independents orange; never red against blue. */
+export const PARTIES: PartyInfo[] = [
+  { id: 'council', name: 'Council bloc', colour: 'purple' },
+  { id: 'gallery', name: 'Gallery bloc', colour: 'green' },
+  { id: 'independent', name: 'Independent', colour: 'orange' },
+  { id: 'minor-a', name: 'Minor party', colour: 'magenta' },
+  { id: 'minor-b', name: 'Minor party', colour: 'sky' },
+];
+
+export interface TypeInfo { id: CandidateType; name: string; help: string }
+
+export const CANDIDATE_TYPES: TypeInfo[] = [
+  { id: 'incumbent', name: 'Incumbent', help: 'Everyone knows the name: a lift everywhere. Their faction staffs the polling places that patronage hands out.' },
+  { id: 'aligned', name: 'Council-aligned', help: 'Endorsed by the Council: a lift among species loyal to it.' },
+  { id: 'reformer', name: 'Reformer', help: 'Runs against the way things are done: a lift among species who distrust the Council.' },
+  { id: 'radical', name: 'Radical', help: 'Loved in some places and loathed in others: local swings twice as wide, and a little less support overall.' },
+  { id: 'protest', name: 'Protest', help: 'A vote to make a point: far less support, spread thin.' },
 ];
 
 export interface Ballot {
@@ -27,9 +48,9 @@ export const BALLOTS: Ballot[] = [
     title: 'Supreme Chair of Mudwick Isle, special election',
     favored: 0,
     candidates: [
-      { name: 'Gnarly Gladhand', faction: 'Council Unity', x: 0.85, y: -0.35 },
-      { name: 'Gnarlene Gnarltooth', faction: 'Independent Grievance', x: -0.55, y: 0.35 },
-      { name: 'Glurp', faction: 'Public Gallery', x: -0.15, y: -0.75 },
+      { name: 'Gnarly Gladhand', faction: 'Council Unity', party: 'council', type: 'aligned', x: 0.85, y: -0.35 },
+      { name: 'Gnarlene Gnarltooth', faction: 'Independent Grievance', party: 'independent', type: 'radical', x: -0.55, y: 0.35 },
+      { name: 'Glurp', faction: 'Public Gallery', party: 'gallery', type: 'reformer', x: -0.15, y: -0.75 },
     ],
   },
   {
@@ -37,8 +58,8 @@ export const BALLOTS: Ballot[] = [
     title: 'Referendum: extend Elder terms to 1,000 years',
     favored: 0,
     candidates: [
-      { name: 'Yes', faction: 'Friends of the Elders', x: 0.6, y: 0 },
-      { name: 'No', faction: 'Term Limits Now', x: -0.45, y: 0.05 },
+      { name: 'Yes', faction: 'Friends of the Elders', party: 'council', type: 'aligned', x: 0.6, y: 0 },
+      { name: 'No', faction: 'Term Limits Now', party: 'gallery', type: 'reformer', x: -0.45, y: 0.05 },
     ],
   },
   {
@@ -46,11 +67,11 @@ export const BALLOTS: Ballot[] = [
     title: 'Supreme Chair, crowded field',
     favored: 0,
     candidates: [
-      { name: 'Gnarly Gladhand', faction: 'Council Unity', x: 0.85, y: -0.35 },
-      { name: 'Gnarlene Gnarltooth', faction: 'Independent Grievance', x: -0.55, y: 0.35 },
-      { name: 'Glurp', faction: 'Public Gallery', x: -0.15, y: -0.75 },
-      { name: 'Barley Sniffington', faction: 'Paws for Progress', x: 0.0, y: 1.0 },
-      { name: 'Gnarfle', faction: 'Cheese and Comedy', x: -0.3, y: -0.2 },
+      { name: 'Gnarly Gladhand', faction: 'Council Unity', party: 'council', type: 'aligned', x: 0.85, y: -0.35 },
+      { name: 'Gnarlene Gnarltooth', faction: 'Independent Grievance', party: 'independent', type: 'radical', x: -0.55, y: 0.35 },
+      { name: 'Glurp', faction: 'Public Gallery', party: 'gallery', type: 'reformer', x: -0.15, y: -0.75 },
+      { name: 'Barley Sniffington', faction: 'Paws for Progress', party: 'minor-a', type: 'aligned', x: 0.0, y: 1.0 },
+      { name: 'Gnarfle', faction: 'Cheese and Comedy', party: 'minor-b', type: 'protest', x: -0.3, y: -0.2 },
     ],
   },
 ];
@@ -66,6 +87,10 @@ export interface LayerInfo<T extends string> {
 }
 
 export const ATTACKS: LayerInfo<AttackId>[] = [
+  {
+    id: 'gerrymander', name: 'Gerrymandering', short: 'Gerrymander', actor: 'map-drawer', actors: 'map-drawers',
+    help: 'The boundary commission moves polling places between neighbouring districts: the other side packed into a few, your own spread thin. Nobody touches a ballot. It flips results only when the winner is whoever takes the most districts.',
+  },
   {
     id: 'stuffing', name: 'Ballot stuffing', short: 'Stuffing', actor: 'clerk', actors: 'clerks',
     help: 'Poll workers drop extra ballots in the box. Needs every worker in the room, so the attackers try the safest polling places first. Leaves more ballots than sign-ins.',
@@ -135,6 +160,7 @@ export const PHASES: Array<{ id: string; name: string }> = [
 ];
 
 export const CATCH_PLACE: Record<string, string> = {
+  commission: 'at the boundary commission',
   'staff-refusal': 'at the polling place',
   observer: 'at the polling place',
   reconciliation: 'at the canvass',
@@ -155,11 +181,3 @@ export function placeName(i: number): string {
   const s = SUFFIX[(i * 5 + Math.floor(i / PREFIX.length)) % SUFFIX.length];
   return `${p}${s}`;
 }
-
-const HOUSE = ['Gristlegate', 'Sumpford', 'Mirecourt', 'Toadhall', 'Bogwater', 'Silt Street', 'Rotmoor', 'Fenwick', 'Murkley', 'Grubbington', 'Damp Cross', 'Sludgeford', 'Oozeby', 'Wartham', 'Newtown', 'Mouldbury'];
-
-export function houseName(i: number): string {
-  const base = HOUSE[i % HOUSE.length];
-  return i < HOUSE.length ? base : `${base} ${Math.floor(i / HOUSE.length) + 1}`;
-}
-

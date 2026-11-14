@@ -2,6 +2,7 @@ import { ATTACKS, CATCH_PLACE, type ElectionResult } from '../../engine';
 import { candColor, int, pct } from './ui';
 
 const VIA_LABEL: Record<string, string> = {
+  commission: 'a commissioner refused',
   'staff-refusal': 'someone refused',
   observer: 'an observer',
   reconciliation: 'sign-in reconciliation',
@@ -41,6 +42,12 @@ export function ResultBars({ result }: { result: ElectionResult }) {
           </span>
         ))}
       </div>
+      <p className="small" style={{ margin: '8px 0 0' }}>
+        <strong>Districts won</strong>{result.config.rule === 'districts' ? ' (they decide it)' : ' (for reference: the most votes decide it)'}:{' '}
+        {names.map((n, j) => `${n} ${result.certified.seats[j] ?? 0}`).join(', ')}
+        {result.redrawn > 0 || result.honest.seats.some((v, j) => v !== result.certified.seats[j])
+          ? `. On the fair map: ${names.map((n, j) => `${n} ${result.honest.seats[j] ?? 0}`).join(', ')}.` : '.'}
+      </p>
     </div>
   );
 }

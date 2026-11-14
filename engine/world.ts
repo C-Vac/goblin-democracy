@@ -1,22 +1,19 @@
 /**
- * Mudwick Isle before anyone cheats: the island, its precincts, who lives where, how they vote,
- * who staffs the polling places and which counting house each one reports to.
+ * Mudwick Isle before anyone cheats: polling places on the map's districts, who lives where, how they
+ * vote, who staffs the polling places and which district counting house each one reports to.
  */
 
-import { houseName, placeName, SPECIES } from './catalog';
+import { placeName, SPECIES } from './catalog';
+import { ASPECT, type Cell, DISTRICTS, GRID_COLUMNS, gridCells } from './mudwick';
 import { binomial, multinomial, normal, stream } from './rng';
-import type { Config, Counts, GridSize, NodeInfo, PrecinctStatic } from './types';
-
-export const GRID: Record<GridSize, [number, number]> = {
-  S: [10, 7],
-  M: [14, 9],
-  L: [20, 13],
-  XL: [28, 18],
-};
+import type { Config, Counts, NodeInfo, PrecinctStatic } from './types';
 
 export interface World {
   cols: number;
   rows: number;
+  /** Cell width and height, % of the bake. */
+  cw: number;
+  ch: number;
   statics: PrecinctStatic[];
   honest: Counts[];
   nodes: NodeInfo[];
@@ -24,21 +21,53 @@ export interface World {
 }
 
 const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
+/** How far a district's character carries past its line, in % of the map's width. */
+const SPREAD = 7;
 
-function islandCells(seed: number, cols: number, rows: number): Array<[number, number]> {
-  const r = stream(seed, 'island');
-  const a1 = r() * 6.28, a2 = r() * 6.28, a3 = r() * 6.28;
-  const cells: Array<[number, number]> = [];
-  for (let row = 0; row < rows; row++) {
-    for (let col = 0; col < cols; col++) {
-      const u = ((col + 0.5) / cols) * 2 - 1;
-      const v = ((row + 0.5) / rows) * 2 - 1;
-      const ang = Math.atan2(v, u);
-      const rad = 0.86 + 0.09 * Math.sin(3 * ang + a1) + 0.06 * Math.sin(5 * ang + a2) + 0.05 * Math.sin(2 * ang + a3);
-      if (Math.hypot(u, v) < rad) cells.push([col, row]);
-    }
+const homeCache = new Map<string, number[]>();
+/**
+ * Each polling place's pull toward a species: its district's affinity, blurred over the map so
+ * neighbourhoods fade into each other (district lines are drawn by officials, not by who lives there).
+ * Depends only on the grid, so it is computed once per size.
+ */
+function homeField(size: string, species: string, cells: Cell[]): number[] {
+  const key = `${size}:${species}`;
+  const hit = homeCache.get(key);
+  if (hit) return hit;
+  const aff = cells.map((c) => DISTRICTS[c.district].affinity[species] ?? 0);
+  const off = cells.map((c) => !!DISTRICTS[c.district].offMap);
+  const out = cells.map((c, i) => {
+    // Voters off the map keep their own character; nobody on the isle lives next door to them.
+    if (off[i]) return aff[i];
+    let w = 0, v = 0;
+    cells.forEach((d, j) => {
+      if (off[j]) return;
+      const k = Math.exp(-(((c.x - d.x) ** 2 + ((c.y - d.y) / ASPECT) ** 2) / (2 * SPREAD ** 2)));
+      w += k; v += k * aff[j];
+    });
+    return v / w;
+  });
+  homeCache.set(key, out);
+  return out;
+}
+
+function zscores(vals: number[]): number[] {
+  const n = vals.length || 1;
+  const m = vals.reduce((a, b) => a + b, 0) / n;
+  const sd = Math.sqrt(vals.reduce((a, b) => a + (b - m) ** 2, 0) / n) || 1;
+  return vals.map((x) => (x - m) / sd);
+}
+
+/** What a candidate's type does to every voter's view of them, by the voter's Council loyalty. */
+export function typeLift(type: string, loyalty: number): number {
+  switch (type) {
+    case 'incumbent': return 0.3;
+    case 'aligned': return 0.25 * Math.max(0, loyalty);
+    case 'reformer': return 0.25 * Math.max(0, -loyalty);
+    case 'radical': return -0.05;
+    case 'protest': return -0.6;
+    default: return 0;
   }
-  return cells;
 }
 
 export function softmax(us: number[]): number[] {
@@ -49,26 +78,25 @@ export function softmax(us: number[]): number[] {
 }
 
 export function buildWorld(cfg: Config): World {
-  const [cols, rows] = GRID[cfg.size] ?? GRID.M;
-  const cells = islandCells(cfg.seed, cols, rows);
+  const grid = gridCells(GRID_COLUMNS[cfg.size] ?? GRID_COLUMNS.M);
+  const { cols, rows, cw, ch } = grid;
+  const cells = grid.cells;
   const n = cells.length;
   const C = cfg.candidates.length;
 
-  // Species: isle-wide shares, then enclaves from a few random blobs per species.
+  // Species: isle-wide shares, tilted toward where each species lives on Mudwick (the district's
+  // affinity) plus a few random blobs so no district is uniform. Clustering sets how hard the tilt is.
   const rawShares = SPECIES.map((s) => Math.max(0, cfg.species[s.id] ?? 0));
   const shareSum = rawShares.reduce((a, b) => a + b, 0) || 1;
   const shares = rawShares.map((s) => s / shareSum);
   const fr = stream(cfg.seed, 'fields');
-  const fields = SPECIES.map(() => {
-    const blobs = [0, 1, 2].map(() => [fr() * 1.6 - 0.8, fr() * 1.6 - 0.8]);
-    const vals = cells.map(([c, r]) => {
-      const u = ((c + 0.5) / cols) * 2 - 1;
-      const v = ((r + 0.5) / rows) * 2 - 1;
-      return blobs.reduce((acc, [bx, by]) => acc + Math.exp(-((u - bx) ** 2 + (v - by) ** 2) / (2 * 0.35 ** 2)), 0);
-    });
-    const m = vals.reduce((a, b) => a + b, 0) / n;
-    const sd = Math.sqrt(vals.reduce((a, b) => a + (b - m) ** 2, 0) / n) || 1;
-    return vals.map((x) => (x - m) / sd);
+  const fields = SPECIES.map((sp) => {
+    const blobs = [0, 1, 2].map(() => [fr() * 100, fr() * 100]);
+    const blob = zscores(cells.map((c) => blobs.reduce((acc, [bx, by]) => acc + Math.exp(-(((c.x - bx) / 18) ** 2 + ((c.y - by) / 18 / ASPECT) ** 2) / 2), 0)));
+    const home = homeField(cfg.size, sp.id, cells);
+    const hz = zscores(home);
+    const flat = home.every((v) => v === home[0]);
+    return cells.map((_, i) => (flat ? 0 : 0.8 * hz[i]) + 0.45 * blob[i]);
   });
   const alpha = (cfg.clustering / 100) * 2.4;
   const meanMail = SPECIES.reduce((a, s, k) => a + s.mail * shares[k], 0) || 1;
@@ -77,26 +105,31 @@ export function buildWorld(cfg: Config): World {
   const honest: Counts[] = [];
 
   for (let i = 0; i < n; i++) {
-    const [col, row] = cells[i];
+    const { col, row, x, y, district } = cells[i];
     const r = stream(cfg.seed, 'precinct', i);
-    const weights = shares.map((s, k) => s * Math.exp(alpha * fields[k][i] + 0.15 * normal(r)));
+    const D = DISTRICTS[district];
+    // Off the map the composition is the point of the district (dual citizens, dwarves), whatever the slider says.
+    const a = D.offMap ? Math.max(alpha, 1.9) : alpha;
+    const weights = shares.map((s, k) => s * Math.exp(a * fields[k][i] + 0.15 * normal(r)));
     const ws = weights.reduce((a, b) => a + b, 0) || 1;
     const mix = weights.map((x) => x / ws);
-    const eligible = Math.max(150, Math.round(900 * Math.exp(0.35 * normal(r))));
+    // Residents of voting age (about 80%), shared between the district's polling places.
+    const eligible = Math.max(60, Math.round(((D.population * 0.8) / Math.max(1, grid.places[district])) * Math.exp(0.3 * normal(r))));
 
     const vr = stream(cfg.seed, 'vote', i);
     const shock = 0.07 * normal(vr);
-    const swing = cfg.candidates.map(() => 0.28 * normal(vr));
-    const returnRate = clamp(0.84 + 0.05 * normal(vr), 0.6, 0.97);
+    const swing = cfg.candidates.map((c) => 0.28 * (c.type === 'radical' ? 2.2 : c.type === 'protest' ? 1.3 : 1) * normal(vr));
+    // Post from abroad is slower and gets lost more.
+    const returnRate = clamp((D.mailOnly ? 0.7 : 0.84) + 0.05 * normal(vr), 0.5, 0.97);
     const counts: Counts = { inPerson: new Array(C).fill(0), mail: new Array(C).fill(0), signins: 0, mailSent: 0, mailReturned: 0 };
     let registered = 0;
     SPECIES.forEach((sp, k) => {
       const elig = eligible * mix[k];
       const reg = Math.round(elig * clamp(sp.registration * (1 + 0.04 * normal(vr)), 0.3, 1));
       registered += reg;
-      const voters = binomial(vr, reg, clamp(sp.turnout + shock, 0.05, 0.95));
-      const mailVoters = binomial(vr, voters, clamp((sp.mail * cfg.mailShare) / 100 / meanMail, 0, 0.9));
-      const probs = softmax(cfg.candidates.map((c, j) => -3.2 * ((sp.x - c.x) ** 2 + (sp.y - c.y) ** 2) + swing[j]));
+      const voters = binomial(vr, reg, clamp(sp.turnout + shock + (D.turnoutShift ?? 0), 0.05, 0.95));
+      const mailVoters = D.mailOnly ? voters : binomial(vr, voters, clamp((sp.mail * cfg.mailShare) / 100 / meanMail, 0, 0.9));
+      const probs = softmax(cfg.candidates.map((c, j) => -3.2 * ((sp.x - c.x) ** 2 + (sp.y - c.y) ** 2) + swing[j] + typeLift(c.type, sp.x)));
       const ip = multinomial(vr, voters - mailVoters, probs);
       const ml = multinomial(vr, mailVoters, probs);
       for (let j = 0; j < C; j++) { counts.inPerson[j] += ip[j]; counts.mail[j] += ml[j]; }
@@ -109,48 +142,27 @@ export function buildWorld(cfg: Config): World {
     counts.mailSent = Math.max(counts.mailSent, counts.mailReturned);
 
     statics.push({
-      i, col, row, name: placeName(i), node: 0, eligible, registered, speciesShare: mix,
+      i, col, row, x, y, district: D.id, name: placeName(i), node: 0, homeNode: 0, eligible, registered, speciesShare: mix,
       staff: [], observer: false, paper: true, reconciles: false, oversight: 1,
     });
     honest.push(counts);
   }
 
-  // Counting houses: k-means over the precinct cells.
-  const K = Math.max(3, Math.round(n / 11));
-  const nr = stream(cfg.seed, 'nodes');
-  const centers: Array<[number, number]> = [];
-  centers.push([cells[Math.floor(nr() * n)][0], cells[Math.floor(nr() * n)][1]]);
-  while (centers.length < K) {
-    let best = 0, bestD = -1;
-    for (let i = 0; i < n; i++) {
-      const d = Math.min(...centers.map(([x, y]) => (cells[i][0] - x) ** 2 + (cells[i][1] - y) ** 2)) + nr() * 0.5;
-      if (d > bestD) { bestD = d; best = i; }
-    }
-    centers.push([cells[best][0], cells[best][1]]);
-  }
-  const assign = new Array(n).fill(0);
-  for (let iter = 0; iter < 5; iter++) {
-    for (let i = 0; i < n; i++) {
-      let best = 0, bestD = Infinity;
-      centers.forEach(([x, y], k) => {
-        const d = (cells[i][0] - x) ** 2 + (cells[i][1] - y) ** 2;
-        if (d < bestD) { bestD = d; best = k; }
-      });
-      assign[i] = best;
-    }
-    centers.forEach((_, k) => {
-      const mine = cells.filter((_, i) => assign[i] === k);
-      if (mine.length) centers[k] = [mine.reduce((a, c) => a + c[0], 0) / mine.length, mine.reduce((a, c) => a + c[1], 0) / mine.length];
-    });
-  }
+  // Counting houses: one per district that has polling places, as on the map.
+  const used = [...new Set(cells.map((c) => c.district))].sort((a, b) => a - b);
+  const nodeOf = new Map(used.map((d, k) => [d, k]));
+  const assign = cells.map((c) => nodeOf.get(c.district) ?? 0);
 
   // Staffing and safeguards per polling place. The local machine is the local honest leader.
   const sg = cfg.safeguards;
-  const ruling = Math.max(0, Math.min(C - 1, cfg.favored));
+  // Patronage belongs to whoever holds office: the incumbent's faction if there is one, else the attackers'.
+  const inc = cfg.candidates.findIndex((c) => c.type === 'incumbent');
+  const ruling = inc >= 0 ? inc : Math.max(0, Math.min(C - 1, cfg.favored));
   const leaderOrder = (c: Counts) =>
     cfg.candidates.map((_, j) => j).sort((a, b) => c.inPerson[b] + c.mail[b] - (c.inPerson[a] + c.mail[a]));
   statics.forEach((p, i) => {
     p.node = assign[i];
+    p.homeNode = assign[i];
     const r = stream(cfg.seed, 'staff', i);
     const order = leaderOrder(honest[i]);
     const mixed = r() < sg.mixedStaffing / 100;
@@ -162,7 +174,8 @@ export function buildWorld(cfg: Config): World {
     p.oversight = new Set(p.staff).size + (p.observer ? 1 : 0);
   });
 
-  const nodes: NodeInfo[] = centers.map(([cx, cy], k) => {
+  const nodes: NodeInfo[] = used.map((d, k) => {
+    const D = DISTRICTS[d];
     const precincts = statics.filter((p) => p.node === k).map((p) => p.i);
     const totals = new Array(C).fill(0);
     precincts.forEach((i) => cfg.candidates.forEach((_, j) => { totals[j] += honest[i].inPerson[j] + honest[i].mail[j]; }));
@@ -172,10 +185,12 @@ export function buildWorld(cfg: Config): World {
     const boss = r() < (cfg.patronage ?? 0) / 100 ? ruling : order[0];
     return {
       i: k,
-      name: houseName(k),
+      name: D.name,
+      district: D.id,
+      kind: D.kind,
       precincts,
-      cx,
-      cy,
+      cx: D.label[0],
+      cy: D.label[1],
       meanOversight: precincts.length ? precincts.reduce((a, i) => a + statics[i].oversight, 0) / precincts.length : 0,
       canvassBoard: mixed ? [order[0], order[1 % C], order[2 % C]] : [boss, boss, boss],
     };
@@ -192,5 +207,5 @@ export function buildWorld(cfg: Config): World {
     return out;
   });
 
-  return { cols, rows, statics, honest, nodes, neighbors };
+  return { cols, rows, cw, ch, statics, honest, nodes, neighbors };
 }

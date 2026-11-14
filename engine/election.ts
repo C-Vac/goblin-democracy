@@ -9,6 +9,8 @@ import { ATTACKS, PHASE_ORDER } from './catalog';
 import { runForensics, type Table } from './forensics';
 import { headlineFor } from './headline';
 import { stream, type Rng } from './rng';
+import { redraw, seatsWon } from './gerrymander';
+import { DISTRICTS } from './mudwick';
 import { buildWorld, type World } from './world';
 import type {
   AttackId, AuditResult, Catch, CatchVia, Config, Conspirator, Counts, ElectionResult, NodeInfo,
@@ -19,10 +21,26 @@ export { PHASE_ORDER };
 
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
 
+/** District names that already start with "The" (The Strip) take no second article. */
+const bare = (name: string) => name.replace(/^The /, '');
+const theOf = (name: string, cap = false) => `${cap ? 'The' : 'the'} ${bare(name)}`;
+
 export function tallyOf(rows: number[][], C: number): Tally {
   const totals = new Array(C).fill(0);
   rows.forEach((r) => r.forEach((v, j) => { totals[j] += v; }));
-  return { totals, winner: totals.indexOf(Math.max(...totals)), ballots: sum(totals) };
+  return { totals, winner: totals.indexOf(Math.max(...totals)), ballots: sum(totals), seats: [] };
+}
+
+/** The result under the config's rule: most votes, or most districts (ties broken by votes). */
+export function decide(rows: number[][], nodeOf: number[], nodes: number, C: number, rule: Config['rule']): Tally {
+  const t = tallyOf(rows, C);
+  t.seats = seatsWon(rows, nodeOf, nodes, C);
+  if (rule === 'districts') {
+    const top = Math.max(...t.seats);
+    const tied = t.seats.map((s, j) => (s === top ? j : -1)).filter((j) => j >= 0);
+    t.winner = tied.sort((a, b) => t.totals[b] - t.totals[a])[0];
+  }
+  return t;
 }
 
 const cloneCounts = (c: Counts): Counts => ({ inPerson: [...c.inPerson], mail: [...c.mail], signins: c.signins, mailSent: c.mailSent, mailReturned: c.mailReturned });
@@ -48,6 +66,8 @@ export function tableFrom(world: World, cfg: Config, reported: number[][], count
         mailReturned: counts[p.i].mailReturned,
         counts: reported[p.i].slice(),
         mail: ballots ? mail : undefined,
+        fixedNode: !!DISTRICTS.find((d) => d.id === p.district)?.offMap,
+        stratum: DISTRICTS.find((d) => d.id === p.district)?.mailOnly ? 'overseas' : undefined,
       };
     }),
   };
@@ -114,10 +134,33 @@ export function runElection(cfg: Config, opts: RunOptions = {}): ElectionResult 
 
   // --- Rolls and staffing -------------------------------------------------------------------
   const insular = statics.filter((p) => p.oversight <= 1).length;
-  log('registration', `${n} polling places report to ${nodes.length} counting houses. ${insular} are insular: one faction holds every role and nobody is watching.`);
+  log('registration', `${n} polling places in ${nodes.length} districts, each counted at its own counting house. ${insular} are insular: one faction holds every role and nobody is watching.`);
+
+  // The boundary commission draws the lines before anyone votes.
+  let moved: number[] = [];
+  if (A('gerrymander') > 0) {
+    const r = stream(cfg.seed, 'commission');
+    const others = cfg.candidates.map((_, j) => j).filter((j) => j !== f);
+    const commission = [f, ...[0, 1].map(() => (r() < S('mixedStaffing') ? others[Math.floor(r() * others.length)] : f))];
+    const refuser = recruit('gerrymander', commission, 'commissioner', null, null, r);
+    if (refuser !== null) {
+      caught('gerrymander', 'registration', 'commission', `${aFaction(refuser).replace(/^a/, 'A')} commissioner refuses to sign the new district map and publishes the draft.`);
+    } else {
+      addC('gerrymander', 'mapping consultant', null, null, null, 0.05, false);
+      const plan = redraw(statics, honest, nodes, f, A('gerrymander'), r, world.neighbors);
+      moved = plan.moved;
+      moved.forEach((i) => tampered[i].add('gerrymander'));
+      const k = nodes.length;
+      log('registration', `The boundary commission redraws the lines: ${moved.length} polling place${moved.length === 1 ? '' : 's'} change district. On last election's numbers ${cand(f)} now leads ${plan.after} of ${k} districts, up from ${plan.before}.${cfg.rule === 'popular' ? ' Under a popular vote the new lines change who counts what, not who wins.' : ''}`, 'attack');
+    }
+  }
+  const homeOf = statics.map((p) => p.homeNode);
+  const drawnOf = () => statics.map((p) => p.node);
+  const K = nodes.length;
 
   // --- Mail voting: harvesting ----------------------------------------------------------------
-  const harvestTargets = pickTargets('harvesting', (p) => (counts[p.i].mailSent / Math.max(1, p.registered)) * 4);
+  // Operatives work door to door on the isle; overseas post is out of their reach.
+  const harvestTargets = pickTargets('harvesting', (p) => (p.district === 'abroad' ? -9 : (counts[p.i].mailSent / Math.max(1, p.registered)) * 4));
   const harvestNodes = new Set<number>();
   let operatives = 0;
   for (const i of harvestTargets) {
@@ -223,7 +266,7 @@ export function runElection(cfg: Config, opts: RunOptions = {}): ElectionResult 
       }
       tampered[i].add('tabulator');
     }
-    log('count', `The ${node.name} machines move ${(rate * 100).toFixed(0)}% of the opposition's votes to ${cand(f)}.`, 'attack', { node: node.i });
+    log('count', `${theOf(node.name, true)} machines move ${(rate * 100).toFixed(0)}% of the opposition's votes to ${cand(f)}.`, 'attack', { node: node.i });
   }
   // Without paper, the machine's word is the only record.
   statics.forEach((p) => { if (!p.paper) paper[p.i] = machine[p.i].slice(); });
@@ -246,7 +289,7 @@ export function runElection(cfg: Config, opts: RunOptions = {}): ElectionResult 
     for (const i of chosen) {
       if (statics[i].observer && r() < 0.8) {
         exposed = true;
-        caught('canvass', 'canvass', 'tape-mismatch', `${statics[i].name}: an observer's photo of the posted tape does not match the ${node.name} canvass.`, i, node.i);
+        caught('canvass', 'canvass', 'tape-mismatch', `${statics[i].name}: an observer's photo of the posted tape does not match the ${bare(node.name)} canvass.`, i, node.i);
         break;
       }
       reported[i] = fabricate(reported[i], f, r);
@@ -257,7 +300,7 @@ export function runElection(cfg: Config, opts: RunOptions = {}): ElectionResult 
       for (const i of done) { reported[i] = machine[i].slice(); tampered[i].delete('canvass'); stopped[i].add('canvass'); }
       colluding.delete(node.i);
     } else {
-      log('canvass', `The ${node.name} canvass board writes in its own numbers for ${done.length} precinct${done.length === 1 ? '' : 's'}.`, 'attack', { node: node.i });
+      log('canvass', `${theOf(node.name, true)} canvass board writes in its own numbers for ${done.length} precinct${done.length === 1 ? '' : 's'}.`, 'attack', { node: node.i });
     }
   }
 
@@ -281,7 +324,7 @@ export function runElection(cfg: Config, opts: RunOptions = {}): ElectionResult 
     }
   }
   if (buried) log('canvass', `Colluding canvass boards wave through ${buried} returns that do not match their poll books.`, 'attack');
-  const canvassed = tallyOf(reported, C);
+  const canvassed = decide(reported, drawnOf(), K, C, cfg.rule);
 
   // --- Audit and recount --------------------------------------------------------------------------
   const alpha = Math.max(0.001, cfg.riskLimit / 100);
@@ -314,11 +357,11 @@ export function runElection(cfg: Config, opts: RunOptions = {}): ElectionResult 
     audit.drawn = st.drawn;
     audit.confirmed = bravoConfirmed(st, alpha);
     if (audit.confirmed) {
-      log('audit', `Auditors hand-check ${st.drawn.toLocaleString('en-US')} random paper ballots and confirm ${cand(st.winner)} at a ${cfg.riskLimit}% risk limit.`);
+      log('audit', `Auditors hand-check ${st.drawn.toLocaleString('en-US')} random paper ballots and confirm ${cand(st.winner)}'s lead in the vote count at a ${cfg.riskLimit}% risk limit.`);
     } else {
       audit.escalated = true;
       handCount = 'audit';
-      log('audit', `${st.drawn.toLocaleString('en-US')} sampled ballots cannot confirm ${cand(st.winner)}. The audit escalates to a full hand count.`, 'flag');
+      log('audit', `${st.drawn.toLocaleString('en-US')} sampled ballots cannot confirm ${cand(st.winner)}'s lead in the vote count. The audit escalates to a full hand count.`, 'flag');
     }
   }
   if (paperIdx.length < n && (handCount || audit.ran)) {
@@ -342,7 +385,7 @@ export function runElection(cfg: Config, opts: RunOptions = {}): ElectionResult 
   }
 
   // --- Certification ------------------------------------------------------------------------------
-  const afterAudit = tallyOf(reported, C);
+  const afterAudit = decide(reported, drawnOf(), K, C, cfg.rule);
   let certifiedWinner = afterAudit.winner;
   let outcome: ElectionResult['headline']['outcome'] = corrected ? 'corrected' : 'certified';
   let refusalAttempted = false;
@@ -377,11 +420,12 @@ export function runElection(cfg: Config, opts: RunOptions = {}): ElectionResult 
   const lr = stream(cfg.seed, 'leaks');
   conspirators.forEach((c) => { c.leaked = lr() < c.leakP; });
   const stillTampered = (layer: AttackId) => tampered.some((t) => t.has(layer)) || (layer === 'refusal' && outcome === 'installed');
+  const honestT = decide(honest.map((c) => c.inPerson.map((v, j) => v + c.mail[j])), homeOf, K, C, cfg.rule);
   const caughtLayers = new Set(catches.map((c) => c.layer));
   for (const { id } of ATTACKS) {
     const leaker = conspirators.find((c) => c.layer === id && c.leaked);
     if (leaker && !caughtLayers.has(id) && stillTampered(id)) {
-      const where = leaker.precinct !== null ? ` in ${statics[leaker.precinct].name}` : leaker.node !== null ? ` at ${nodes[leaker.node].name}` : '';
+      const where = leaker.layer === 'gerrymander' ? ' on the boundary commission' : leaker.precinct !== null ? ` in ${statics[leaker.precinct].name}` : leaker.node !== null ? ` at ${theOf(nodes[leaker.node].name)} counting house` : '';
       const who = leaker.recruited ? `${aFaction(leaker.faction ?? 0)} ${leaker.role}` : `${/^[aeiou]/i.test(leaker.role) ? 'An' : 'A'} ${leaker.role}`;
       caught(id, 'aftermath', 'leak', `${who.charAt(0).toUpperCase()}${who.slice(1)}${where} talks to GNN.`, leaker.precinct, leaker.node);
     }
@@ -402,18 +446,40 @@ export function runElection(cfg: Config, opts: RunOptions = {}): ElectionResult 
   if (forensics.fails) log('aftermath', `Statisticians flag the returns: ${forensics.detectors.filter((d) => d.status === 'fail').map((d) => d.name.toLowerCase()).join(', ')}.`, 'flag');
 
   let certifiedTotals = afterAudit.totals.slice();
-  const strong = catches.some((c) => c.phase === 'aftermath');
+  let certifiedSeats = afterAudit.seats.slice();
+
+  // A redrawn map goes to court when someone talks or the efficiency gap gives it away.
+  let struck = false;
+  if (moved.length && outcome !== 'installed') {
+    const gap = forensics.detectors.find((d) => d.id === 'map-outlier');
+    const evidence = catches.some((c) => c.layer === 'gerrymander') || gap?.status === 'fail';
+    if (evidence) {
+      if (stream(cfg.seed, 'map-court')() < S('courts')) {
+        struck = true;
+        for (const i of moved) { tampered[i].delete('gerrymander'); stopped[i].add('gerrymander'); statics[i].node = statics[i].homeNode; }
+        for (const nd of nodes) nd.precincts = statics.filter((p) => p.node === nd.i).map((p) => p.i);
+        const fair = decide(reported, homeOf, K, C, cfg.rule);
+        certifiedSeats = fair.seats;
+        certifiedWinner = fair.winner;
+        caught('gerrymander', 'aftermath', 'court', `The court strikes down the new district lines${gap?.status === 'fail' ? ` (${gap.stat.split(';')[0].replace(/, p <=.*/, '')})` : ''} and orders the count tallied on the old map.`);
+      } else {
+        log('aftermath', 'A lawsuit against the new district lines fails.');
+      }
+    }
+  }
+
+  const strong = catches.some((c) => c.phase === 'aftermath' && c.layer !== 'gerrymander');
   const weak = forensics.fails >= 2;
-  const fraudStands = tampered.some((t) => t.size > 0);
+  const fraudStands = tampered.some((t) => [...t].some((l) => l !== 'gerrymander'));
   if ((strong || weak) && outcome !== 'installed') {
     const cr = stream(cfg.seed, 'court');
     if (cr() < S('courts')) {
       const finds = fraudStands && (strong || cr() < 0.5);
       if (finds) {
-        const shift = sum(afterAudit.totals.map((v, j) => Math.abs(v - (honestTally(honest, C).totals[j])))) / 2;
+        const shift = sum(afterAudit.totals.map((v, j) => Math.abs(v - honestT.totals[j]))) / 2;
         const sorted = afterAudit.totals.slice().sort((a, b) => b - a);
-        const material = afterAudit.winner !== honestTally(honest, C).winner || shift >= sorted[0] - (sorted[1] ?? 0);
-        const layer = ATTACKS.find(({ id }) => stillTampered(id))?.id ?? 'stuffing';
+        const material = certifiedWinner !== honestT.winner || shift >= sorted[0] - (sorted[1] ?? 0);
+        const layer = ATTACKS.find(({ id }) => id !== 'gerrymander' && stillTampered(id))?.id ?? 'stuffing';
         if (material) {
           outcome = 'rerun';
           caught(layer, 'aftermath', 'court', 'The court finds fraud large enough to change the result and orders a new election, which is held cleanly.');
@@ -430,9 +496,8 @@ export function runElection(cfg: Config, opts: RunOptions = {}): ElectionResult 
     }
   }
 
-  const honestT = honestTally(honest, C);
-  if (outcome === 'rerun') { certifiedTotals = honestT.totals.slice(); certifiedWinner = honestT.winner; }
-  const certified: Tally = { totals: certifiedTotals, winner: certifiedWinner, ballots: sum(certifiedTotals) };
+  if (outcome === 'rerun') { certifiedTotals = honestT.totals.slice(); certifiedWinner = honestT.winner; certifiedSeats = honestT.seats.slice(); }
+  const certified: Tally = { totals: certifiedTotals, winner: certifiedWinner, ballots: sum(certifiedTotals), seats: certifiedSeats };
 
   const flagsByUnit = statics.map(() => [] as string[]);
   forensics.detectors.forEach((d) => { if (d.status === 'fail' || d.status === 'warn') d.units.forEach((u) => flagsByUnit[u]?.push(d.id)); });
@@ -448,18 +513,15 @@ export function runElection(cfg: Config, opts: RunOptions = {}): ElectionResult 
     published: counts[p.i],
   }));
 
+  nodes.forEach((nd) => { nd.colluded = colluding.has(nd.i); });
   const result: ElectionResult = {
-    config: cfg, cols: world.cols, rows: world.rows, precincts, nodes, honest: honestT, canvassed, certified,
-    conspirators, catches, events, audit, forensics, insular,
+    config: cfg, cols: world.cols, rows: world.rows, cw: world.cw, ch: world.ch, precincts, nodes, honest: honestT, canvassed, certified,
+    conspirators, catches, events, audit, forensics, insular, redrawn: struck ? 0 : moved.length,
     headline: { attempted: false, flipped: false, caught: false, caughtAt: null, outcome, conspirators: 0, text: '' },
   };
   result.headline = headlineFor(result, refusalAttempted);
   log(PHASE_ORDER[7], result.headline.text, 'outcome');
   return result;
-}
-
-function honestTally(honest: Counts[], C: number): Tally {
-  return tallyOf(honest.map((c) => c.inPerson.map((v, j) => v + c.mail[j])), C);
 }
 
 /** A return written by hand: round-ish numbers and a healthy share for the right candidate. */

@@ -4,6 +4,7 @@ import { ATTACK_IDS, cleanVersion, decodeConfig, defaultConfig, encodeConfig, PR
 import { parseCsv, resultToCsv } from '../csv';
 import { runElection } from '../election';
 import { runForensics, type Table } from '../forensics';
+import { DISTRICTS, GRID_COLUMNS, gridCells, inPoly, landShare } from '../mudwick';
 import { mulberry32 } from '../rng';
 import type { AttackId, Config } from '../types';
 
@@ -143,5 +144,98 @@ describe('links and files', () => {
     const again = runForensics(table);
     const pick = (ds: typeof again.detectors) => ds.filter((d) => ['reconciliation', 'last-digit', 'integer-pct', 'fingerprint'].includes(d.id)).map((d) => d.status);
     expect(pick(again.detectors)).toEqual(pick(r.forensics.detectors));
+  });
+});
+
+describe('the map', () => {
+  it('puts every polling place on land, inside its own district, and gives every district one', () => {
+    for (const size of ['S', 'M', 'L', 'XL'] as const) {
+      const g = gridCells(GRID_COLUMNS[size]);
+      for (const c of g.cells) {
+        expect(inPoly([c.x, c.y], DISTRICTS[c.district].poly)).toBe(true);
+        if (!DISTRICTS[c.district].offMap) expect(landShare(c.x - g.cw / 2, c.y - g.ch / 2, c.x + g.cw / 2, c.y + g.ch / 2)).toBeGreaterThanOrEqual(0.55);
+      }
+      expect(new Set(g.cells.map((c) => c.district)).size).toBe(DISTRICTS.length);
+    }
+  });
+
+  it('counts each district in its own counting house', () => {
+    const r = runElection(defaultConfig());
+    expect(r.nodes.map((n) => n.name).sort()).toEqual(DISTRICTS.map((d) => d.name).sort());
+    for (const p of r.precincts) expect(r.nodes[p.static.node].district).toBe(p.static.district);
+  });
+});
+
+describe('gerrymandering', () => {
+  const base = (seed: number): Config => {
+    const c = cleanVersion({ ...defaultConfig(), seed, rule: 'districts' });
+    c.safeguards.mixedStaffing = 0;
+    return c;
+  };
+
+  it('moves polling places, never ballots, and never the voters off the map', () => {
+    const c = base(11);
+    c.attacks.gerrymander = 100;
+    const r = runElection(c);
+    const clean = runElection(base(11));
+    expect(r.redrawn).toBeGreaterThan(0);
+    r.precincts.forEach((p, i) => {
+      expect(sum(p.reported)).toBe(sum(clean.precincts[i].reported));
+      if (['abroad', 'aliens'].includes(p.static.district)) expect(p.static.node).toBe(p.static.homeNode);
+    });
+    expect(r.honest.totals).toEqual(clean.honest.totals);
+  });
+
+  it('wins the favoured side more districts than the fair map gives it', () => {
+    let gained = 0;
+    for (const seed of seeds.slice(0, 12)) {
+      const c = base(seed);
+      c.attacks.gerrymander = 100;
+      const r = runElection(c);
+      gained += r.canvassed.seats[c.favored] - r.honest.seats[c.favored];
+    }
+    expect(gained / 12).toBeGreaterThan(1.5);
+  });
+
+  it('cannot flip a result decided by votes', () => {
+    for (const seed of seeds.slice(0, 8)) {
+      const c = { ...base(seed), rule: 'popular' as const };
+      c.attacks.gerrymander = 100;
+      expect(runElection(c).headline.flipped).toBe(false);
+    }
+  });
+});
+
+// Each preset's notice tells a story. A map re-sync can change any seed's outcome, so check the stories
+// here and re-seed the preset when one fails (see docs/SPEC.md, "New districts").
+describe('preset stories', () => {
+  const run = (id: string) => {
+    const p = PRESETS.find((x) => x.id === id)!;
+    return { cfg: p.config, r: runElection(structuredClone(p.config)) };
+  };
+
+  it('looks-guilty: nobody cheats and a test still fails', () => {
+    const { r } = run('looks-guilty');
+    expect(r.conspirators).toHaveLength(0);
+    expect(r.forensics.detectors.some((d) => d.status === 'fail')).toBe(true);
+  });
+
+  it('draw-the-lines: the new lines win the election and nobody notices', () => {
+    const { r } = run('draw-the-lines');
+    expect(r.headline.flipped).toBe(true);
+    expect(r.headline.caught).toBe(false);
+  });
+
+  it('colorado: a narrow loss nudged into a win, caught by the audit and put back', () => {
+    const { cfg, r } = run('colorado');
+    expect(r.honest.winner).not.toBe(cfg.favored);
+    expect(r.headline.caughtAt?.via).toBe('audit');
+    expect(r.certified.winner).toBe(r.honest.winner);
+  });
+
+  it('four-clerks is caught; paperless gets away', () => {
+    expect(run('four-clerks').r.headline.caught).toBe(true);
+    const pl = run('paperless').r.headline;
+    expect(pl.flipped && !pl.caught).toBe(true);
   });
 });

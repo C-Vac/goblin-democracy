@@ -3,7 +3,18 @@
  * island. It travels without its page, so the island and the footer say plainly it is fiction.
  */
 
-import { CATCH_PLACE, type ElectionResult } from '../../engine';
+import { ASPECT, CATCH_PLACE, DISTRICTS, type ElectionResult } from '../../engine';
+import { loadMapArt } from '../mapArt';
+
+function loadImage(src: string): Promise<HTMLImageElement | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
 
 function wrap(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
   const words = text.split(' ');
@@ -26,7 +37,8 @@ export async function drawResultCard(r: ElectionResult): Promise<string> {
   const ctx = canvas.getContext('2d')!;
   // Always the dark brand look, whatever the viewer's theme.
   const bg = '#0e1510', surface = '#142018', text = '#ecf2ed', muted = '#8b9c8f', ink = '#74e88c', bad = '#ff7a6b', good = '#3ccf63';
-  const colors = ['#9085e9', '#199e70', '#c98500', '#d55181', '#0ca30c'];
+  const PARTY_HEX: Record<string, string> = { council: '#9085e9', gallery: '#118660', independent: '#cc7a12', 'minor-a': '#e05a9a', 'minor-b': '#3a9ed0' };
+  const colors = r.config.candidates.map((c) => PARTY_HEX[c.party] ?? '#8b9c8f');
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, W, H);
 
@@ -36,7 +48,7 @@ export async function drawResultCard(r: ElectionResult): Promise<string> {
 
   ctx.fillStyle = text;
   ctx.font = '800 48px "Bricolage Grotesque", sans-serif';
-  const lines = wrap(ctx, r.headline.text, 640).slice(0, 5);
+  const lines = wrap(ctx, r.headline.text, 610).slice(0, 5);
   lines.forEach((l, i) => ctx.fillText(l, 56, 140 + i * 56));
 
   const h = r.headline;
@@ -59,31 +71,49 @@ export async function drawResultCard(r: ElectionResult): Promise<string> {
     ctx.fillText(a.length > 12 ? `${a.slice(0, 11)}…` : a, x + 18, y + 74);
   });
 
-  // The island, coloured by certified result per precinct; tampered places outlined.
-  const box = { x: 740, y: 96, w: 404, h: 404 };
-  ctx.fillStyle = '#0b1c22';
+  // The island: the painted map, each polling place coloured by its certified leader, tampered places outlined.
+  const box = { x: 712, y: 112, w: 440, h: Math.round(440 / ASPECT) };
+  ctx.save();
   ctx.beginPath();
-  ctx.roundRect(box.x, box.y, box.w, box.h, 18);
-  ctx.fill();
-  const cell = Math.min((box.w - 40) / r.cols, (box.h - 40) / r.rows);
-  const ox = box.x + (box.w - cell * r.cols) / 2, oy = box.y + (box.h - cell * r.rows) / 2;
+  ctx.roundRect(box.x, box.y, box.w, box.h, 14);
+  ctx.clip();
+  ctx.fillStyle = '#0b1c22';
+  ctx.fillRect(box.x, box.y, box.w, box.h);
+  const art = await loadImage((await loadMapArt()).url);
+  if (art) ctx.drawImage(art, box.x, box.y, box.w, box.h);
+  ctx.fillStyle = 'rgba(0,0,0,0.22)';
+  ctx.fillRect(box.x, box.y, box.w, box.h);
+  const px = (x: number) => box.x + (x / 100) * box.w, py = (y: number) => box.y + (y / 100) * box.h;
+  const cw = (r.cw / 100) * box.w, ch = (r.ch / 100) * box.h;
   for (const p of r.precincts) {
     const row = p.reported;
     const j = row.indexOf(Math.max(...row));
-    const x = ox + p.static.col * cell, y = oy + p.static.row * cell;
-    ctx.fillStyle = colors[j % 5];
-    ctx.globalAlpha = 0.85;
-    ctx.fillRect(x + 1, y + 1, cell - 2, cell - 2);
+    const x = px(p.static.x) - cw / 2, y = py(p.static.y) - ch / 2;
+    ctx.fillStyle = colors[j];
+    ctx.globalAlpha = 0.8;
+    ctx.fillRect(x + 0.5, y + 0.5, cw - 1, ch - 1);
     ctx.globalAlpha = 1;
     if (p.tampered.length) {
       ctx.strokeStyle = bad;
-      ctx.lineWidth = 2;
-      ctx.strokeRect(x + 2, y + 2, cell - 4, cell - 4);
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(x + 1, y + 1, cw - 2, ch - 2);
     }
   }
+  for (const d of DISTRICTS) {
+    if (!r.nodes.some((n) => n.district === d.id)) continue;
+    const outline = new Path2D();
+    d.poly.forEach(([x, y], k) => (k ? outline.lineTo(px(x), py(y)) : outline.moveTo(px(x), py(y))));
+    outline.closePath();
+    ctx.strokeStyle = 'rgba(244,234,210,0.8)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash(d.offMap ? [4, 3] : []);
+    ctx.stroke(outline);
+  }
+  ctx.setLineDash([]);
+  ctx.restore();
   ctx.fillStyle = muted;
   ctx.font = '600 14px "JetBrains Mono", monospace';
-  ctx.fillText('MUDWICK ISLE', box.x + 16, box.y + 26);
+  ctx.fillText('MUDWICK ISLE', box.x, box.y - 12);
 
   const names = r.config.candidates.map((c) => c.name);
   ctx.font = '500 16px "Plus Jakarta Sans", sans-serif';
@@ -92,12 +122,12 @@ export async function drawResultCard(r: ElectionResult): Promise<string> {
   const room = box.w / shown.length - 40;
   shown.forEach((n, k) => {
     ctx.fillStyle = colors[k];
-    ctx.fillRect(lx, box.y + box.h + 18, 12, 12);
+    ctx.fillRect(lx, box.y + box.h + 22, 12, 12);
     ctx.fillStyle = text;
     let label = n;
     while (ctx.measureText(label).width > room && label.length > 4) label = label.slice(0, -1);
     if (label !== n) label = `${label.slice(0, -1)}…`;
-    ctx.fillText(label, lx + 18, box.y + box.h + 29);
+    ctx.fillText(label, lx + 18, box.y + box.h + 33);
     lx += box.w / shown.length;
   });
 

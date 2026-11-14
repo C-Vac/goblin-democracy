@@ -6,6 +6,7 @@
  * election that looks guilty" preset), and careful fraud can pass all of them.
  */
 
+import { mulberry32 } from './rng';
 import { benfordSecond, chiSquareP, mad, median, normalCdf, poissonUpper, studentTUpper, weightedPearson } from './stats';
 import type { DetectorResult, DetectorStatus, ForensicReport } from './types';
 
@@ -25,6 +26,10 @@ export interface Unit {
   counts: number[];
   /** Mail-channel counts per option, when the data splits them out. */
   mail?: number[];
+  /** A unit whose district nobody can redraw (voters off the map). The map test never moves it. */
+  fixedNode?: boolean;
+  /** Units only comparable with each other (overseas ballots, say). The mail test compares within a stratum. */
+  stratum?: string;
 }
 
 export interface Table {
@@ -48,6 +53,12 @@ export const TUNING = {
   minOutliers: 2,
   /** Neighbour pairs share units, so they are not independent: inflate the border test's error. */
   borderDesignEffect: 3,
+  /** Random-walk steps, and the bounds on p (sqrt(2e)) that warn and fail. */
+  mapSteps: 20000,
+  /** Share a district may grow or shrink by during the map test's walk. */
+  mapSizeBand: 0.15,
+  mapWarnP: 0.1,
+  mapFailP: 0.05,
 };
 
 const tail2 = (z: number) => 2 * (1 - normalCdf(z));
@@ -233,10 +244,18 @@ function mail(t: Table): DetectorResult {
   // Each unit's statistic is standardised by its own sampling error first, so small units do not
   // look extreme by chance; the robust z across units then absorbs honest overdispersion.
   const robustFlag = (zs: number[]) => {
-    const ok = zs.filter(Number.isFinite);
-    if (ok.length < 10) return;
-    const m = median(ok), s = mad(ok) || 1e-9;
-    zs.forEach((v, i) => { if (Number.isFinite(v)) { checks++; if ((v - m) / s > TUNING.mailZ) flagged.add(i); } });
+    // Each stratum against its own centre: overseas ballots come back later and less often everywhere.
+    const strata = new Map<string, number[]>();
+    t.units.forEach((u, i) => { const k = u.stratum ?? ''; strata.set(k, [...(strata.get(k) ?? []), i]); });
+    // A small stratum borrows the spread of the main body and keeps only its own centre.
+    const main = (strata.get('') ?? []).map((i) => zs[i]).filter(Number.isFinite);
+    const mainSpread = main.length >= 10 ? mad(main) : NaN;
+    for (const [k, idx] of strata) {
+      const ok = idx.map((i) => zs[i]).filter(Number.isFinite);
+      if (ok.length < (k ? 3 : 10)) continue;
+      const m = median(ok), s = (k && Number.isFinite(mainSpread) ? mainSpread : mad(ok)) || 1e-9;
+      idx.forEach((i) => { const v = zs[i]; if (Number.isFinite(v)) { checks++; if ((v - m) / s > TUNING.mailZ) flagged.add(i); } });
+    }
   };
   if (hasMail) {
     let best: number[] = [];
@@ -325,6 +344,95 @@ function boundaries(t: Table, nb: number[][] | null): DetectorResult {
   };
 }
 
+/** Votes the top two waste (Stephanopoulos and McGhee 2015), as a signed share of their votes. */
+function efficiencyGapOf(sums: number[][], a: number, b: number): number {
+  let wa = 0, wb = 0, all = 0;
+  for (const s of sums) {
+    const va = s[a], vb = s[b], T = va + vb;
+    if (!T) continue;
+    const need = Math.floor(T / 2) + 1;
+    if (va >= vb) { wa += va - need; wb += vb; } else { wb += vb - need; wa += va; }
+    all += T;
+  }
+  return all ? (wa - wb) / all : 0;
+}
+
+/**
+ * Was the map drawn for one side? The outlier test of Chikina, Frieze and Pegden (2017): walk at
+ * random from the published map, moving one unit at a time to a neighbouring district (districts
+ * stay whole and within TUNING.mapSizeBand of their size, as real uses of the test hold districts near
+ * equal population), and score every map passed. A map drawn to win districts sits at a peak its
+ * neighbours cannot reach: if it beats all but a fraction e of the walk, p <= sqrt(2e). The score is the
+ * expected district count of each candidate in turn (Bonferroni over candidates), so the test needs no
+ * idea who drew the map. Without
+ * the size band the walk drifts to big districts eating small ones, and every compact map looks drawn.
+ */
+function mapOutlier(t: Table, nb: number[][] | null): DetectorResult {
+  const name = 'Map drawn for one side';
+  const hasNode = t.units.every((u) => u.node !== undefined && u.node !== '');
+  const hasXY = t.units.every((u) => Number.isFinite(u.x) && Number.isFinite(u.y));
+  const names = [...new Set(t.units.map((u) => u.node as string))];
+  if (!hasNode || !hasXY || names.length < 6 || t.options.length < 2) return na('map-outlier', name, 'node (district) and x, y columns, 6 or more districts');
+  const near = nb ?? knn(t, 6);
+  const n = t.units.length, C = t.options.length, K = names.length;
+  const fixed = (u: Unit) => u.fixedNode === true;
+  const node = t.units.map((u) => names.indexOf(u.node as string));
+  const v = t.units.map((u) => t.options.map((_, j) => u.counts[j] ?? 0));
+  const sums = names.map(() => new Array(C).fill(0));
+  const size = names.map(() => 0);
+  for (let i = 0; i < n; i++) { size[node[i]]++; v[i].forEach((x, j) => { sums[node[i]][j] += x; }); }
+  const lo = size.map((s0) => Math.max(1, Math.floor(s0 * (1 - TUNING.mapSizeBand))));
+  const hi = size.map((s0) => Math.ceil(s0 * (1 + TUNING.mapSizeBand)));
+  const soft = (s: number[]) => {
+    const T = sum(s);
+    return s.map((x, j) => { if (!T) return 0; let o = 0; s.forEach((y, k) => { if (k !== j && y > o) o = y; }); return 1 / (1 + Math.exp(-(x - o) / (0.1 * T + 1))); });
+  };
+  const per = sums.map(soft);
+  const seatSum = t.options.map((_, j) => sum(per.map((p) => p[j])));
+  // One score per candidate: a map can be drawn for anyone, including a candidate who is not ahead.
+  const start = [...seatSum];
+  const whole = (k: number, skip: number) => {
+    let first = -1, members = 0;
+    for (let i = 0; i < n; i++) if (node[i] === k && i !== skip) { members++; if (first < 0) first = i; }
+    if (first < 0) return false;
+    const seen = new Set([first]);
+    const stack = [first];
+    while (stack.length) { const x = stack.pop()!; for (const y of near[x]) if (node[y] === k && y !== skip && !seen.has(y)) { seen.add(y); stack.push(y); } }
+    return seen.size === members;
+  };
+  const r = mulberry32(n * 7919 + K);
+  const higher = new Array(C).fill(1);
+  let states = 1;
+  const steps = TUNING.mapSteps;
+  for (let s = 0; s < steps; s++) {
+    const i = Math.floor(r() * n);
+    const j = near[i][Math.floor(r() * near[i].length)];
+    if (j !== undefined && !fixed(t.units[i]) && !fixed(t.units[j]) && node[j] !== node[i] && size[node[i]] > lo[node[i]] && size[node[j]] < hi[node[j]] && whole(node[i], i)) {
+      const a = node[i], b = node[j];
+      node[i] = b; size[a]--; size[b]++;
+      v[i].forEach((x, k) => { sums[a][k] -= x; sums[b][k] += x; });
+      for (const d of [a, b]) { const old = per[d]; per[d] = soft(sums[d]); old.forEach((o, k) => { seatSum[k] += per[d][k] - o; }); }
+    }
+    states++;
+    for (let k = 0; k < C; k++) if (seatSum[k] >= start[k] - 1e-9) higher[k]++;
+  }
+  // Bonferroni over the candidates scored.
+  const ps = higher.map((h) => Math.min(1, Math.sqrt((2 * h) / states) * C));
+  const leadJ = ps.indexOf(Math.min(...ps));
+  const p = ps[leadJ], eps = higher[leadJ] / states;
+  const gapSums = names.map(() => new Array(C).fill(0));
+  t.units.forEach((u) => { const k = names.indexOf(u.node as string); u.counts.forEach((x, j) => { gapSums[k][j] += x; }); });
+  const totals = t.options.map((_, j) => sum(gapSums.map((s) => s[j])));
+  const ord = totals.map((_, j) => j).sort((x, y) => totals[y] - totals[x]);
+  const gap = Math.abs(efficiencyGapOf(gapSums, ord[0], ord[1]));
+  return {
+    id: 'map-outlier', name, units: [], p,
+    status: p <= TUNING.mapFailP ? 'fail' : p <= TUNING.mapWarnP ? 'warn' : 'pass',
+    stat: `${t.options[leadJ]}'s districts beat ${((1 - eps) * 100).toFixed(2)}% of ${steps.toLocaleString('en-US')} nearby maps, p <= ${p.toFixed(3)} after Bonferroni over ${C} candidates; efficiency gap ${(gap * 100).toFixed(1)}%`,
+    detail: 'Walks at random from the published map, one unit at a time, and asks whether the published lines win one candidate more districts than nearly every map nearby. A map drawn by hand to win sits on a peak. The efficiency gap (votes each side wastes) is shown for reference; on its own it flags uneven districts and lopsided geography too.',
+  };
+}
+
 export function runForensics(t: Table, nb: number[][] | null = null): ForensicReport {
   const report: ForensicReport = { detectors: [], fails: 0, warns: 0, scatter: [], lastDigits: new Array(10).fill(0), secondDigits: new Array(10).fill(0) };
   report.detectors = [
@@ -336,6 +444,7 @@ export function runForensics(t: Table, nb: number[][] | null = null): ForensicRe
     mail(t),
     boundaries(t, nb),
     digitTest(t, 'second', report),
+    mapOutlier(t, nb),
   ];
   report.fails = report.detectors.filter((d) => d.status === 'fail').length;
   report.warns = report.detectors.filter((d) => d.status === 'warn').length;

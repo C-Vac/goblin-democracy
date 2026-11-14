@@ -1,7 +1,15 @@
-import { useId, type ReactNode } from 'react';
+import { useId, type CSSProperties, type ReactNode } from 'react';
 import type { DetectorStatus } from '../../engine';
 
+/** A candidate's colour is their party's. The page maps --c<j> to the party of candidate j (partyVars). */
 export const candColor = (j: number) => `var(--c${j % 5})`;
+
+/** CSS variables mapping candidate slots to party colours. Set on any element that redefines --p-*. */
+export function partyVars(cands: Array<{ party: string }>): CSSProperties {
+  const out: Record<string, string> = {};
+  cands.forEach((c, j) => { out[`--c${j}`] = `var(--p-${c.party})`; });
+  return out as CSSProperties;
+}
 
 export const pct = (x: number, digits = 1) => `${(x * 100).toFixed(digits)}%`;
 export const int = (x: number) => Math.round(x).toLocaleString('en-US');

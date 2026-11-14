@@ -51,6 +51,14 @@ export function binomial(r: Rng, n: number, p: number): number {
     for (let i = 0; i < n; i++) if (r() < p) k++;
     return k;
   }
+  // Rare outcomes: Poisson by inversion, so small counts keep their skew (the normal shortcut rounds them away).
+  const q = Math.min(p, 1 - p), m = n * q;
+  if (m < 25) {
+    let k = 0, prob = Math.exp(-m), cum = prob;
+    const u = r();
+    while (u > cum && k < n) { k++; prob *= m / k; cum += prob; }
+    return p <= 0.5 ? k : n - k;
+  }
   const k = Math.round(n * p + Math.sqrt(n * p * (1 - p)) * normal(r));
   return Math.max(0, Math.min(n, k));
 }

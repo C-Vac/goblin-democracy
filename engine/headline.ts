@@ -15,6 +15,7 @@ const TEST_NAME: Record<string, string> = {
   mail: 'the mail-ballot test',
   boundaries: 'the border test',
   'second-digit': "Benford's law",
+  'map-outlier': 'the map test',
 };
 
 export function crewPhrase(r: ElectionResult): string {

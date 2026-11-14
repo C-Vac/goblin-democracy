@@ -17,11 +17,12 @@
   --sea: #0b1c22;
   --sea-line: #12303a;
   --land-edge: #3c5a43;
-  --c0: #9085e9;
-  --c1: #199e70;
-  --c2: #c98500;
-  --c3: #d55181;
-  --c4: #0ca30c;
+  --p-council: #9085e9;
+  --p-gallery: #118660;
+  --p-independent: #cc7a12;
+  --p-minor-a: #e05a9a;
+  --p-minor-b: #3a9ed0;
+  --c0: var(--p-council); --c1: var(--p-independent); --c2: var(--p-gallery); --c3: var(--p-minor-a); --c4: var(--p-minor-b);
   --seq-0: #1c2b21;
   --seq-1: #2c5a39;
   --seq-2: #3f8a52;
@@ -55,11 +56,11 @@
     --sea: #dcebef;
     --sea-line: #c5dde3;
     --land-edge: #9cb7a1;
-    --c0: #6250d6;
-    --c1: #1baf7a;
-    --c2: #eda100;
-    --c3: #e87ba4;
-    --c4: #008300;
+    --p-council: #6250d6;
+    --p-gallery: #12805a;
+    --p-independent: #cc7410;
+    --p-minor-a: #c8458a;
+    --p-minor-b: #2384b5;
     --seq-0: #e9f1e6;
     --seq-1: #bfe0c3;
     --seq-2: #86c793;
@@ -89,11 +90,11 @@
   --sea: #dcebef;
   --sea-line: #c5dde3;
   --land-edge: #9cb7a1;
-  --c0: #6250d6;
-  --c1: #1baf7a;
-  --c2: #eda100;
-  --c3: #e87ba4;
-  --c4: #008300;
+  --p-council: #6250d6;
+  --p-gallery: #12805a;
+  --p-independent: #cc7410;
+  --p-minor-a: #c8458a;
+  --p-minor-b: #2384b5;
   --seq-0: #e9f1e6;
   --seq-1: #bfe0c3;
   --seq-2: #86c793;
@@ -189,6 +190,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .field label { font-size: 13px; font-weight: 600; }
 .input, select.input { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; width: 100%; }
 .cand-row { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+.cand-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; }
+.cand-meta .input { font-size: 12px; padding: 4px 6px; }
 .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; flex: none; }
 .radio-inline { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); white-space: nowrap; }
 
@@ -282,3 +285,32 @@ textarea.input { min-height: 160px; font-family: var(--font-mono); font-size: 12
 
 .settings-jump { display: none; }
 @media (max-width: 1080px) { .settings-jump { display: inline; } }
+
+/* The map is the painted bake, which stays dark in both themes, so its overlay keeps the dark tokens. */
+.on-art {
+  --p-council: #9085e9; --p-gallery: #118660; --p-independent: #cc7a12; --p-minor-a: #e05a9a; --p-minor-b: #3a9ed0;
+  --seq-0: #1c2b21; --seq-1: #2c5a39; --seq-2: #3f8a52; --seq-3: #5cbb6d; --seq-4: #8fe79b;
+  --good: #3ccf63; --warn: #e3a72f; --bad: #ff7a6b;
+  --surface-2: #1a281f; --surface-3: #223327;
+  background: #0b1c22;
+}
+.on-art .cell-label { fill: #ecf2ed; font-family: var(--font-mono); font-weight: 700; paint-order: stroke; stroke: #0e1510; stroke-width: 4px; stroke-linejoin: round; }
+.on-art .district-line { fill: none; stroke: #f4ead2; stroke-opacity: 0.85; stroke-width: 3.5; stroke-linejoin: round; filter: drop-shadow(0 0 2px rgb(0 0 0 / 0.8)); }
+.on-art .district-name { fill: #fffaf0; font: 800 27px var(--font-display); letter-spacing: 0.04em; paint-order: stroke; stroke: #14100a; stroke-width: 7px; stroke-linejoin: round; }
+.on-art .district-name.country, .on-art .district-name.base { font-style: italic; font-weight: 700; }
+.on-art .cartouche text { fill: #3a2614; }
+.on-art .cartouche .c-title { font: 800 46px var(--font-display); letter-spacing: 0.12em; }
+.on-art .cartouche .c-sub { font: 700 26px var(--font-sans); }
+.on-art .cartouche .c-note { font: 600 19px var(--font-mono); fill: #4a3220; }
+/* On a phone the map scrolls sideways inside its card instead of shrinking past legibility. */
+@media (max-width: 620px) {
+  .map-scroll { overflow-x: auto; margin: 0 -4px; padding: 0 4px; }
+  .map-scroll .map-svg { min-width: 780px; }
+}
+.on-art .district-line.faded { stroke-dasharray: 10 8; stroke-opacity: 0.55; stroke-width: 2.5; }
+.on-art .district-line.offmap { stroke-dasharray: 14 8; }
+.on-art .redrawn-line { fill: none; stroke: var(--warn); stroke-width: 5; stroke-linecap: round; filter: drop-shadow(0 0 2px rgb(0 0 0 / 0.9)); }
+.on-art .offmap-arrow { stroke: #fff6dc; stroke-width: 6; stroke-linecap: round; filter: drop-shadow(0 0 2px rgb(0 0 0 / 0.9)); }
+.on-art .district-name.abroad, .on-art .district-name.aliens { font-style: italic; }
+.on-art .district-sub { fill: #fff6dc; font: 600 18px var(--font-sans); paint-order: stroke; stroke: #14100a; stroke-width: 5px; stroke-linejoin: round; }
+.pattern-swatch { flex: none; }

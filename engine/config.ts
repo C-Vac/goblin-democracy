@@ -1,9 +1,12 @@
 /** Default config, presets, and the URL codec (config plus seed in the link). */
 
-import { BALLOTS, SPECIES } from './catalog';
-import type { AttackId, Config, SafeguardId } from './types';
+import { BALLOTS, CANDIDATE_TYPES, PARTIES, SPECIES } from './catalog';
+import type { AttackId, CandidateType, Config, PartyId, SafeguardId } from './types';
 
-export const ATTACK_IDS: AttackId[] = ['stuffing', 'impersonation', 'harvesting', 'tabulator', 'canvass', 'refusal'];
+const PARTY_IDS = PARTIES.map((p) => p.id);
+const TYPE_IDS = CANDIDATE_TYPES.map((t) => t.id);
+
+export const ATTACK_IDS: AttackId[] = ['gerrymander', 'stuffing', 'impersonation', 'harvesting', 'tabulator', 'canvass', 'refusal'];
 export const SAFEGUARD_IDS: SafeguardId[] = ['paper', 'reconciliation', 'mixedStaffing', 'observers', 'auditRate', 'recountTrigger', 'courts'];
 
 const noAttacks = (): Record<AttackId, number> => Object.fromEntries(ATTACK_IDS.map((id) => [id, 0])) as Record<AttackId, number>;
@@ -27,6 +30,7 @@ export function defaultConfig(): Config {
     safeguards: { paper: 100, reconciliation: 80, mixedStaffing: 60, observers: 40, auditRate: 20, recountTrigger: 25, courts: 70 },
     rla: false,
     riskLimit: 5,
+    rule: 'popular',
   };
 }
 
@@ -68,13 +72,24 @@ export const PRESETS: Preset[] = [
     id: 'looks-guilty', name: 'A clean election that looks guilty', kind: 'sandbox',
     blurb: 'Nobody cheats. The numbers say otherwise.',
     notice: 'Species that vote as a bloc in tight enclaves make whole districts look stuffed. Nobody touched a ballot; check the Truth view. Real elections trip these tests by chance too.',
-    config: make((c) => { c.seed = 89; c.clustering = 100; c.species = { goblin: 30, gnome: 20, troll: 20, pixie: 10, dwarf: 10, leafy: 10 }; }),
+    config: make((c) => { c.seed = 64; c.size = 'XL'; c.clustering = 100; c.species = { goblin: 30, gnome: 20, troll: 20, pixie: 10, dwarf: 10, leafy: 10 }; }),
   },
   {
     id: 'four-clerks', name: 'Four corrupt clerks', kind: 'sandbox',
     blurb: 'One stuffed box in one quiet polling place.',
     notice: 'Four people are enough to stuff one box, and the sign-in reconciliation at the canvass is enough to find it.',
-    config: make((c) => { c.seed = 1; c.attacks.stuffing = 1; }),
+    config: make((c) => { c.seed = 2; c.size = 'S'; c.attacks.stuffing = 1; }),
+  },
+  {
+    id: 'draw-the-lines', name: 'Draw the lines', kind: 'sandbox',
+    blurb: 'Nobody touches a ballot. The boundary commission does the work.',
+    notice: 'The winner is whoever takes the most districts. A one-faction commission moves polling places across district lines until the Council\u2019s candidate wins more districts with fewer votes. Compare the Reported and Honest maps, then raise mixed staffing to put the other side on the commission.',
+    config: make((c) => {
+      c.seed = 4;
+      c.rule = 'districts';
+      c.attacks.gerrymander = 70;
+      c.safeguards = { ...c.safeguards, mixedStaffing: 0, courts: 40 };
+    }),
   },
   {
     id: 'council-classic', name: 'The Council classic', kind: 'sandbox',
@@ -99,7 +114,7 @@ export const PRESETS: Preset[] = [
     notice: 'Reconciliation and the digit tests go red, someone talks, and with no courts to act on any of it the result stands.',
     config: make((c) => {
       c.patronage = 100;
-      c.attacks = { stuffing: 100, impersonation: 100, harvesting: 100, tabulator: 100, canvass: 100, refusal: 100 };
+      c.attacks = { gerrymander: 100, stuffing: 100, impersonation: 100, harvesting: 100, tabulator: 100, canvass: 100, refusal: 100 };
       c.safeguards = { paper: 0, reconciliation: 0, mixedStaffing: 0, observers: 0, auditRate: 0, recountTrigger: 0, courts: 0 };
     }),
   },
@@ -121,7 +136,7 @@ export const PRESETS: Preset[] = [
     blurb: 'Historical pattern: paid operatives harvesting mail ballots in two counties.',
     notice: 'Harvesting needs many hands, so someone talks, and the mail returns look wrong in public data. The fix came from the board and the courts: a new election.',
     source: 'North Carolina 9th congressional district, 2018. The State Board of Elections heard evidence of absentee-ballot tampering in Bladen and Robeson counties, declined to certify and ordered a new election (2019).',
-    config: make((c) => { c.seed = 5; c.mailShare = 35; c.attacks.harvesting = 8; c.safeguards.courts = 90; }),
+    config: make((c) => { c.seed = 4; c.mailShare = 35; c.attacks.harvesting = 8; c.safeguards.courts = 90; }),
   },
   {
     id: 'paperless', name: 'Paperless machines, no audit', kind: 'history',
@@ -129,7 +144,7 @@ export const PRESETS: Preset[] = [
     notice: 'Without paper, no audit or recount can check a machine. This preset adds tampering to show the blind spot; it does not claim any real machine was tampered with.',
     source: 'Paperless direct-recording electronic machines were common in US jurisdictions into the 2010s; security reviews criticised them because they leave nothing to audit.',
     config: make((c) => {
-      c.seed = 3;
+      c.seed = 2;
       c.attacks.tabulator = 40;
       c.safeguards = { ...c.safeguards, paper: 0, auditRate: 0 };
     }),
@@ -140,7 +155,7 @@ export const PRESETS: Preset[] = [
     notice: 'A small tabulator nudge turns a narrow loss into a narrow win. The audit samples until it is confident, finds the paper disagrees, and the hand count puts it back.',
     source: 'Colorado ran the first statewide risk-limiting audits after its 2017 election. Ballot-polling math: Lindeman, Stark and Yates (2012).',
     config: make((c) => {
-      c.seed = 3;
+      c.seed = 2;
       c.species = { goblin: 40, gnome: 16, troll: 12, pixie: 10, dwarf: 12, leafy: 10 };
       c.attacks.tabulator = 25;
       c.rla = true;
@@ -178,9 +193,11 @@ export function decodeConfig(s: string): Config | null {
     const raw = JSON.parse(b64urlDecode(s));
     const d = defaultConfig();
     const candidates = Array.isArray(raw.candidates) && raw.candidates.length >= 2 && raw.candidates.length <= 5
-      ? raw.candidates.map((c: Record<string, unknown>) => ({
+      ? raw.candidates.map((c: Record<string, unknown>, k: number) => ({
         name: String(c.name ?? '').slice(0, 40) || 'Candidate',
         faction: String(c.faction ?? '').slice(0, 40) || 'Independent',
+        party: PARTY_IDS.includes(c.party as PartyId) ? (c.party as PartyId) : PARTY_IDS[k % PARTY_IDS.length],
+        type: TYPE_IDS.includes(c.type as CandidateType) ? (c.type as CandidateType) : 'aligned',
         x: num(c.x, -1, 1, 0),
         y: num(c.y, -1, 1, 0),
       }))
@@ -200,6 +217,7 @@ export function decodeConfig(s: string): Config | null {
       safeguards: Object.fromEntries(SAFEGUARD_IDS.map((id) => [id, num(raw.safeguards?.[id], 0, 100, d.safeguards[id])])) as Config['safeguards'],
       rla: Boolean(raw.rla),
       riskLimit: num(raw.riskLimit, 1, 20, d.riskLimit),
+      rule: raw.rule === 'districts' ? 'districts' : 'popular',
     };
   } catch {
     return null;

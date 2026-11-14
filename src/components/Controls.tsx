@@ -1,6 +1,6 @@
 import {
-  ATTACKS, BALLOTS, PRESETS, SAFEGUARDS, SPECIES, withBallot,
-  type AttackId, type Config, type GridSize, type SafeguardId,
+  ATTACKS, BALLOTS, CANDIDATE_TYPES, PARTIES, PRESETS, SAFEGUARDS, SPECIES, withBallot,
+  type AttackId, type CandidateType, type Config, type GridSize, type PartyId, type SafeguardId,
 } from '../../engine';
 import { Slider, Swatch } from './ui';
 
@@ -11,10 +11,10 @@ const SAFEGUARD_FORMAT: Partial<Record<SafeguardId, (v: number) => string>> = {
 };
 
 const SIZES: Array<{ id: GridSize; label: string }> = [
-  { id: 'S', label: 'Small (~50)' },
-  { id: 'M', label: 'Medium (~70)' },
-  { id: 'L', label: 'Large (~180)' },
-  { id: 'XL', label: 'Huge (~350)' },
+  { id: 'S', label: 'Few' },
+  { id: 'M', label: 'Normal' },
+  { id: 'L', label: 'Many' },
+  { id: 'XL', label: 'Every street' },
 ];
 
 export function Controls(props: {
@@ -93,6 +93,14 @@ export function Controls(props: {
               {BALLOTS.map((b) => <option key={b.id} value={b.id}>{b.title}</option>)}
             </select>
           </div>
+          <div className="field">
+            <label htmlFor="rule">Who wins</label>
+            <select id="rule" className="input" value={cfg.rule} onChange={(e) => set({ rule: e.target.value as Config['rule'] })}>
+              <option value="popular">Most votes across the isle</option>
+              <option value="districts">Most districts won</option>
+            </select>
+            <p className="group-note" style={{ marginTop: 4 }}>Gerrymandering can only flip a result decided by districts.</p>
+          </div>
           {cfg.candidates.map((c, j) => (
             <div key={j} className="field">
               <div className="cand-row">
@@ -106,11 +114,20 @@ export function Controls(props: {
                 />
                 <span className="tiny muted">{c.faction}</span>
               </div>
+              <div className="cand-meta">
+                <select className="input" aria-label={`${c.name}: party`} value={c.party} onChange={(e) => set({ candidates: cfg.candidates.map((x, k) => (k === j ? { ...x, party: e.target.value as PartyId } : x)) })}>
+                  {PARTIES.map((p) => <option key={p.id} value={p.id}>{p.id.startsWith("minor") ? `${p.name} (${p.colour})` : p.name}</option>)}
+                </select>
+                <select className="input" aria-label={`${c.name}: type`} value={c.type} onChange={(e) => set({ candidates: cfg.candidates.map((x, k) => (k === j ? { ...x, type: e.target.value as CandidateType } : x)) })}>
+                  {CANDIDATE_TYPES.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+              </div>
+              <p className="tiny muted" style={{ margin: '2px 0 0' }}>{CANDIDATE_TYPES.find((t) => t.id === c.type)?.help}</p>
               <Slider label="Council loyalty" value={Math.round(c.x * 100)} min={-100} max={100} onChange={(v) => set({ candidates: cfg.candidates.map((x, k) => (k === j ? { ...x, x: v / 100 } : x)) })} format={(v) => (v > 0 ? `for ${v}` : v < 0 ? `against ${-v}` : 'neutral')} />
               <Slider label="Who gets a vote" value={Math.round(c.y * 100)} min={-100} max={100} onChange={(v) => set({ candidates: cfg.candidates.map((x, k) => (k === j ? { ...x, y: v / 100 } : x)) })} format={(v) => (v > 30 ? 'every species' : v < -30 ? 'goblins only' : 'mixed')} />
             </div>
           ))}
-          <p className="group-note">Each species votes for the candidate nearest its own views, with local swings.</p>
+          <p className="group-note">Each species votes for the candidate nearest its own views, with local swings. A candidate's colour is their party's; two candidates of one party share it.</p>
         </div>
       </details>
 
@@ -127,7 +144,7 @@ export function Controls(props: {
               help={s.id === 'leafy' ? 'Goblins the Council reclassified as houseplants. Mostly still registered.' : undefined}
             />
           ))}
-          <Slider label="Enclaves" value={cfg.clustering} onChange={(v) => set({ clustering: v })} format={(v) => `${v}%`} help="0: every precinct has the isle-wide mix. 100: each species lives in its own neighbourhoods." />
+          <Slider label="Enclaves" value={cfg.clustering} onChange={(v) => set({ clustering: v })} format={(v) => `${v}%`} help="0: every polling place has the isle-wide mix. 100: each species keeps to its own part of the isle (pixies in Pixie Village, gnomes in the Revenue District)." />
           <Slider label="Mail voting" value={cfg.mailShare} onChange={(v) => set({ mailShare: v })} format={(v) => `${v}% of voters`} />
         </div>
       </details>
@@ -145,10 +162,10 @@ export function Controls(props: {
             <label htmlFor="seed">Seed</label>
             <div className="btn-row">
               <input id="seed" className="input mono" style={{ flex: 1 }} inputMode="numeric" value={cfg.seed} onChange={(e) => { const v = Number(e.target.value.replace(/\D/g, '')); if (Number.isFinite(v)) set({ seed: Math.min(v, 2 ** 31) }); }} />
-              <button type="button" className="btn btn-small" onClick={() => set({ seed: Math.floor(Math.random() * 1e6) })}>New island</button>
+              <button type="button" className="btn btn-small" onClick={() => set({ seed: Math.floor(Math.random() * 1e6) })}>New voters</button>
             </div>
           </div>
-          <p className="group-note">The seed fixes the island, its voters and every random draw. The same link replays the same election.</p>
+          <p className="group-note">The seed fixes who lives where, how they vote, who staffs each polling place and every other random draw. The same link replays the same election.</p>
         </div>
       </details>
     </aside>
