@@ -8,3 +8,4 @@ export { bravoAsn } from './audit';
 export { parseCsv, resultToCsv, CSV_TEMPLATE } from './csv';
 export { crewPhrase } from './headline';
 export { MAP, DISTRICTS, ASPECT, TOTAL_POPULATION, type District } from './mudwick';
+export { MASK_B64, MASK_H, MASK_W } from './mudwickMask';

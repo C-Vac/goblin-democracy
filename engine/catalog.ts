@@ -173,6 +173,21 @@ export const CATCH_PLACE: Record<string, string> = {
   forensics: 'by the statisticians',
 };
 
+/** Where it was caught, short enough for the result card's third box. */
+export const CATCH_SHORT: Record<string, string> = {
+  commission: 'Commission',
+  'staff-refusal': 'Polling place',
+  observer: 'Polling place',
+  reconciliation: 'Canvass',
+  'tape-mismatch': 'Canvass',
+  'roll-check': 'Roll check',
+  audit: 'Audit',
+  recount: 'Recount',
+  court: 'Court',
+  leak: 'A leak',
+  forensics: 'Statistics',
+};
+
 const PREFIX = ['Bog', 'Mire', 'Sludge', 'Fen', 'Gristle', 'Moss', 'Toad', 'Rot', 'Murk', 'Grub', 'Silt', 'Damp', 'Ooze', 'Wart', 'Slime', 'Newt', 'Mould', 'Grime'];
 const SUFFIX = ['side', 'bottom', ' Row', ' Hollow', ' Lanes', ' Wharf', ' Flats', ' Steps', 'wick', ' Cross', 'gate', ' End', 'moor', ' Market'];
 

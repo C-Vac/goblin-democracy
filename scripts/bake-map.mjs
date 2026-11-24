@@ -2,13 +2,13 @@
 /**
  * Cut a local copy of the Mudwick map for development, and (once) the land mask.
  *
- *   SHARP_FROM=~/rooms/lore/engine/x.mjs IMAGE_ONLY=1 node scripts/bake-map.mjs ~/rooms/map/bake4/v43.jpg v43
+ *   SHARP_FROM=<file beside a sharp install> node scripts/bake-map.mjs <map base image> v55
  *
  * Writes public/map-local/mudwick.webp (gitignored: the map is never committed; the page fetches the
  * live map from GoblinLife.org's CDN, see src/mapArt.ts, and uses this copy only in development when
  * the CDN has none). Without IMAGE_ONLY it also writes engine/mudwickMask.ts, the land mask the engine
- * uses to put polling places on land; the map room froze the island and water, so the mask holds
- * across bakes. The bake, its districts and its names belong to the map room. sharp is not a
+ * uses to put polling places on land. The current mask is cut from the finished map, v55 (its 2048 px
+ * base from the CDN manifest). The map, its districts and its names belong to GoblinLife.org's map room. sharp is not a
  * dependency of this repo: point SHARP_FROM at any file whose folder can resolve it.
  */
 import { createRequire } from 'node:module';

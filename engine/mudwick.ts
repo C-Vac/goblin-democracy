@@ -3,8 +3,8 @@
  *
  * The isle's districts are the map room's (engine/mudwickDistricts.ts, synced by
  * scripts/sync-districts.mjs): whole blocks of the street grid, one piece each, meeting along streets
- * and never overlapping. The land mask (engine/mudwickMask.ts) comes from the frozen base layer, so
- * it holds across bakes. Who lives where follows the published lore: pixies under the mushrooms,
+ * and never overlapping. The land mask (engine/mudwickMask.ts) is cut from the finished map, v55.
+ * Who lives where follows the published lore: pixies under the mushrooms,
  * readmitted gnomes in the Revenue District, trolls in the wet south.
  */
 

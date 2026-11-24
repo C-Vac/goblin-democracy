@@ -3,7 +3,7 @@
  * island. It travels without its page, so the island and the footer say plainly it is fiction.
  */
 
-import { ASPECT, CATCH_PLACE, DISTRICTS, type ElectionResult } from '../../engine';
+import { ASPECT, CATCH_SHORT, DISTRICTS, type ElectionResult } from '../../engine';
 import { loadMapArt } from '../mapArt';
 
 function loadImage(src: string): Promise<HTMLImageElement | null> {
@@ -55,7 +55,7 @@ export async function drawResultCard(r: ElectionResult): Promise<string> {
   const answers: Array<[string, string, string]> = [
     ['Flipped?', h.flipped ? 'Yes' : 'No', h.flipped ? bad : good],
     ['Caught?', !h.attempted ? 'Clean' : h.caught ? 'Yes' : 'No', !h.attempted ? muted : h.caught ? good : bad],
-    ['Where?', h.caughtAt ? (CATCH_PLACE[h.caughtAt.via] ?? '').replace(/^(at|in|by) (the )?/, '') : '—', text],
+    ['Where?', h.caughtAt ? (CATCH_SHORT[h.caughtAt.via] ?? 'Caught') : '—', text],
   ];
   answers.forEach(([q, a, c], i) => {
     const x = 56 + i * 215, y = 440;
@@ -67,8 +67,8 @@ export async function drawResultCard(r: ElectionResult): Promise<string> {
     ctx.font = '500 18px "Plus Jakarta Sans", sans-serif';
     ctx.fillText(q, x + 18, y + 32);
     ctx.fillStyle = c;
-    ctx.font = '800 30px "Bricolage Grotesque", sans-serif';
-    ctx.fillText(a.length > 12 ? `${a.slice(0, 11)}…` : a, x + 18, y + 74);
+    ctx.font = `800 ${a.length > 9 ? 24 : 30}px "Bricolage Grotesque", sans-serif`;
+    ctx.fillText(a, x + 18, y + 74, 164);
   });
 
   // The island: the painted map, each polling place coloured by its certified leader, tampered places outlined.
@@ -79,7 +79,7 @@ export async function drawResultCard(r: ElectionResult): Promise<string> {
   ctx.clip();
   ctx.fillStyle = '#0b1c22';
   ctx.fillRect(box.x, box.y, box.w, box.h);
-  const art = await loadImage((await loadMapArt()).url);
+  const art = await loadImage((await loadMapArt()).canvasUrl);
   if (art) ctx.drawImage(art, box.x, box.y, box.w, box.h);
   ctx.fillStyle = 'rgba(0,0,0,0.22)';
   ctx.fillRect(box.x, box.y, box.w, box.h);

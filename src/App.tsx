@@ -22,8 +22,10 @@ const TABS: Array<{ id: Tab; label: string }> = [
 const PHASE_IDS = PHASES.map((p) => p.id);
 const DONE = PHASES.length;
 
+/** The election in the address: the working state in the hash, or a shared link's query (?p=&c=). */
 function readHash(): { cfg: Config | null; tab: Tab; preset: string | null } {
-  const q = new URLSearchParams(location.hash.slice(1));
+  const hash = new URLSearchParams(location.hash.slice(1));
+  const q = hash.has('c') || hash.has('p') ? hash : new URLSearchParams(location.search);
   const tab = (TABS.find((t) => t.id === q.get('t'))?.id ?? 'sim') as Tab;
   const preset = q.get('p');
   const c = q.get('c');
@@ -37,7 +39,8 @@ function writeHash(cfg: Config, tab: Tab, preset: string | null) {
   if (preset) q.set('p', preset);
   q.set('c', encodeConfig(cfg));
   try {
-    history.replaceState(null, '', `#${q.toString()}`);
+    // The working state lives in the hash; a shared link's query is dropped once it has been read.
+    history.replaceState(null, '', `${location.pathname}#${q.toString()}`);
   } catch {
     /* sandboxed: the link just won't update */
   }
@@ -95,8 +98,15 @@ export function App() {
   };
   const skip = () => { window.clearInterval(timer.current); setPhase(DONE); if (mode === 'oversight') setMode('reported'); };
 
+  /** The shareable link: a query, not the hash, so the site can draw this election's own preview card. */
+  const shareLink = () => {
+    const q = new URLSearchParams();
+    if (presetId) q.set('p', presetId);
+    q.set('c', encodeConfig(cfg));
+    return `${location.origin}${location.pathname}?${q.toString()}`;
+  };
   const copyLink = async () => {
-    try { await navigator.clipboard.writeText(location.href); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* no clipboard */ }
+    try { await navigator.clipboard.writeText(shareLink()); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* no clipboard */ }
   };
   const makeCard = async () => { if (result) setCard(await drawResultCard(result)); };
 

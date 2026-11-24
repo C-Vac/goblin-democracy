@@ -1,7 +1,8 @@
 # Mudwick Isle Election Fraud Simulator: Agile Specification
 
-> **Status:** 🔄 In Progress. v0.1 built 2026-11-13; v0.2 (the real Mudwick map) 2026-11-14; hosting at
-> www.goblinlife.org/democracy waits on the site PR.
+> **Status:** 🔄 In Progress. v0.1 live at www.goblinlife.org/democracy since 2026-11-17 (site #318). v0.2 (the
+> finished Mudwick map v55, owner-signed districts, per-election share cards) built 2026-11-24 and waits on its site PR.
+> Last updated 2026-11-24.
 > **Repo:** `C-Vac/goblin-democracy`, a git submodule of the site monorepo at `packages/democracy`.
 > **Route:** `www.goblinlife.org/democracy` (static Vite build copied into `apps/www/public/democracy` at www build time).
 > **Owner brief:** 2026-11-13 (session request plus the "Model design" notes pasted the same day).
@@ -46,16 +47,19 @@ simulator for the Council of Elders to find out what holding one would involve.
 `engine/world.ts`, `engine/mudwick.ts`, `engine/mudwickDistricts.ts`, `engine/mudwickMask.ts`, `engine/rng.ts`. The
 painted map is never committed (owner 2026-11-14: "have it fetch the map from cdn at a static address, which we can push
 updated maps to in the future, with caching and cachebusting, instead of committing the map to the repo"). The page
-fetches `https://cdn.goblinlife.org/site/map/manifest.json` (short cache) and takes the content-hashed image it names
-under `base["2048"]` (immutable), in `src/mapArt.ts`; `VITE_MAP_MANIFEST` overrides the address. Until the art loads, or
-if it can't (the CDN is empty until the owner calls the map finished), the isle is drawn from the land mask with a
-parchment panel for the lettering; in development a gitignored local copy (`public/map-local/mudwick.webp`, cut by
-`scripts/bake-map.mjs`) stands in. The result card draws the same art (CORS). The land mask was cut once from the frozen base layer and holds across bakes. Polling places
+reads the map's manifest (`site/map/manifest.json` on `cdn.goblinlife.org`, short cache) and takes the content-hashed
+image it names under `base["2048"]` (immutable), in `src/mapArt.ts`. The CDN sends no CORS headers, so the manifest is
+read through this site: www rewrites `/democracy/map/*` to the CDN's `site/map/*`, and `vite dev` / `vite preview` proxy
+the same path; `VITE_MAP_ROOT` overrides it. The picture on the page loads straight from the CDN (a plain image needs no
+CORS); the result card reads it through `/democracy/map/` so its canvas isn't tainted. Until the art loads, or if it
+can't, the isle is drawn from the land mask with a parchment panel for the lettering; in development a gitignored local
+copy (`public/map-local/mudwick.webp`, cut by `scripts/bake-map.mjs`) stands in. The land mask is cut from the finished
+map, v55 (the owner called the map finished 2026-11-17; the map room published v55 on 2026-11-18). Polling places
 are a square grid over the map, kept where the centre lies in a district and the cell is mostly land. The 16 districts
 are the map room's draft (`~/rooms/map/plan/districts-draft.json`, synced into `engine/mudwickDistricts.ts` by
 `scripts/sync-districts.mjs`): whole blocks of the street grid, one piece each, meeting along streets, never
 overlapping; bare mountain blocks belong to none. Names and edges ✅ signed off by the owner 2026-11-14 ("sign off the
-districts as drawn"); the dwelling counts are from bake v43.
+districts as drawn"); the dwelling counts are from the shipped bake v55 (map room `df7f2ae`).
 Each district has a species affinity from published lore
 (pixies in Pixie Village, gnomes in the Revenue District, trolls in the Low Marsh and Docks, dwarves in the Works, Leafies on
 Broadcast Hill and Southside), blurred across district lines (`SPREAD` 7% of the map width) so honest borders don't look
@@ -68,9 +72,12 @@ from a named stream, so attacks never change the honest voters underneath.
   its own counting house (tests).
 - New districts: `node scripts/sync-districts.mjs ~/rooms/map/plan/districts-draft.json`, then rerun the calibration
   below; the "preset stories" tests say which presets need a new seed. A new map needs nothing here: the map room pushes
-  it to the CDN. Local dev copy: `SHARP_FROM=~/rooms/lore/engine/x.mjs IMAGE_ONLY=1 node scripts/bake-map.mjs <bake.jpg> vNN`.
+  it to the CDN. If its coastline moves, re-cut the land mask from the new base image:
+  `SHARP_FROM=<any file whose folder resolves sharp> node scripts/bake-map.mjs <base.webp> vNN` (in the site monorepo,
+  `node_modules/.pnpm/sharp@*/node_modules/sharp/package.json`); `IMAGE_ONLY=1` cuts only the local dev copy.
 - AC: no map image in the repo; an unreachable manifest shows the land-mask map, never a broken image (checked in a
-  browser 2026-11-14 against a mock CDN: CDN art, CDN down, result card).
+  browser 2026-11-14 against a mock CDN: CDN art, CDN down, result card). 2026-11-24 against the live CDN through the
+  proxy: v55 on the page and on the result card, no console errors, desktop and phone, light and dark.
 
 #### Story 1.1a: Polling places follow people — ✅ Completed (2026-11-14); figures 🔄 pending canon
 Owner 2026-11-14: Pixie Village and Gunner's Head had far too many polling places; almost nobody lives there. Each district
@@ -168,7 +175,9 @@ P(caught | flip), P(flip and never caught), where it was caught, crew size again
 each test's fail rate on rigged and clean runs.
 
 #### Story 1.7: Links and CSV — ✅ Completed
-`engine/config.ts`, `engine/csv.ts`. Base64url JSON config in the hash, clamped on read. CSV import (header row,
+`engine/config.ts`, `engine/csv.ts`. Base64url JSON config, clamped on read. The working state lives in the hash
+(`#p=<preset>&c=<code>`); "Copy link" gives the query form (`/democracy?p=<preset>&c=<code>`), which the site answers
+with that election's own preview card (Epic 3). Either form opens the election; old hash links keep working. CSV import (header row,
 `unit` plus two or more count columns; optional `registered`, `voters`, `eligible`, `x`, `y`, `node`,
 `mail:<option>`, `mail_sent`, `mail_returned`) and export of a simulated election in the same format.
 - AC: config round-trips; garbage is rejected; an exported election re-imports with the same test results (tests).
@@ -188,20 +197,30 @@ each test's fail rate on rigged and clean runs.
   the chance nobody talks.
 - **Forensics** (`Forensics.tsx`): test cards, turnout-versus-share scatter, digit charts.
 - **Audit math** (`AuditPanel.tsx`): ballots needed against margin on log scales, with this election marked.
-- **Result card** (`ResultCard.ts`): 1200x630 PNG with the headline, the three answers, the painted map with each
-  polling place coloured by its leader, and a footer that says Mudwick Isle is fictional.
+- **Result card** (`ResultCard.ts`): 1200x630 PNG with the headline, the three answers (short "where" labels,
+  `CATCH_SHORT`), the painted map with each polling place coloured by its leader, and a footer that says Mudwick Isle
+  is fictional.
 - **Monte Carlo tab**, **Your data tab** (runs in the browser, says so), **About the model** with sources.
 - Palette: violet, aqua, yellow, magenta, green (validated for colour-blind separation in both themes); no red
   against blue. Light and dark follow the site's `gl_color_scheme` cookie, else the device.
 
-### Epic 3: Hosting on www — 🔄 In Progress
+### Epic 3: Hosting on www — ✅ Completed (v0.1 live 2026-11-17); share cards 🔄 In Progress (v0.2 site PR)
 - Site monorepo: submodule at `packages/democracy`; `apps/www/scripts/build-democracy.mjs` builds it into
   `apps/www/public/democracy` before `next build`; rewrite `/democracy` to the built `index.html`.
 - Squash-merge site changes that only bump the submodule with `Deploy-Apps: www`.
 - AC: `www.goblinlife.org/democracy` loads, the worker loads from `/democracy/assets/`, deep links with `#c=` replay.
+- **Share cards** (owner rule: every result link previews its own result). www imports the engine
+  (`@goblinlife/democracy/engine`) and re-runs a shared seed on the server: `/democracy?p=&c=` is rewritten to
+  `app/api/democracy/share`, which serves the built page with that election's title, description and image;
+  `/democracy/card.png?p=&c=` is `app/api/democracy/card`, a 1200x630 card drawn from the result (`lib/democracyOg.tsx`,
+  cached for good, since a code always draws the same card). The plain page's static tags point at the plain card.
+  Shared codes carry free-text candidate names, so the server shows only the simulator's own roster: any other name
+  becomes "Candidate N" and any other faction the party's name. A goblinlife.org card never says a real person rigged
+  an election.
+- AC: a shared link's tags and card describe that election; a renamed candidate never reaches the card; every preset's
+  card renders (`apps/www/src/__tests__/democracy-og.test.tsx`).
 
 ### Epic 4: Later (not built)
-- A real OG image per link (needs a server; the PNG card covers sharing for now).
 - GNN tie-in: each result card headline as a GNN story stub.
 - A labs page entry and a lore registry row (`tech:` entry) through the lore room.
 - A "your system" preset gallery for non-election CSVs (expenses, stock counts).

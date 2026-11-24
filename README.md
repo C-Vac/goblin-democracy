@@ -28,8 +28,9 @@ pnpm build    # dist/, or $DEMOCRACY_OUT_DIR
 - `engine/` is pure TypeScript with no DOM. It runs in a Web Worker (`src/worker.ts`).
 - `src/` is the React interface.
 - `docs/SPEC.md` is the living spec.
-- The painted map is not in this repo: `src/mapArt.ts` fetches it from GoblinLife.org's CDN (manifest at
-  `https://cdn.goblinlife.org/site/map/manifest.json`, override with `VITE_MAP_MANIFEST`) and falls back to the land mask.
+- The painted map is not in this repo: `src/mapArt.ts` reads GoblinLife.org's map manifest through `/democracy/map/`
+  (the site rewrites it to `cdn.goblinlife.org/site/map/`; `vite dev` and `vite preview` proxy it; override with
+  `VITE_MAP_ROOT`) and falls back to the land mask.
   `scripts/bake-map.mjs` cuts a gitignored local copy for development, and the land mask;
   `scripts/sync-districts.mjs` copies the map room's district outlines into `engine/mudwickDistricts.ts`. The map art
   and districts belong to GoblinLife.org.

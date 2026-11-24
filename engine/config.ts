@@ -85,7 +85,7 @@ export const PRESETS: Preset[] = [
     blurb: 'Nobody touches a ballot. The boundary commission does the work.',
     notice: 'The winner is whoever takes the most districts. A one-faction commission moves polling places across district lines until the Council\u2019s candidate wins more districts with fewer votes. Compare the Reported and Honest maps, then raise mixed staffing to put the other side on the commission.',
     config: make((c) => {
-      c.seed = 1;
+      c.seed = 9;
       c.rule = 'districts';
       c.attacks.gerrymander = 70;
       c.safeguards = { ...c.safeguards, mixedStaffing: 0, courts: 40 };
