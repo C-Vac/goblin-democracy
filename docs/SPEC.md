@@ -1,7 +1,7 @@
 # Mudwick Isle Election Fraud Simulator: Agile Specification
 
-> **Status:** 🔄 In Progress. v0.1 live at www.goblinlife.org/democracy since 2026-11-17 (site #318). v0.2 (the
-> finished Mudwick map v55, owner-signed districts, per-election share cards) built 2026-11-24 and waits on its site PR.
+> **Status:** ✅ Live at www.goblinlife.org/democracy. v0.1 shipped 2026-11-17 (site #318); v0.2 (the finished
+> Mudwick map v55, owner-signed districts, per-election share cards) shipped 2026-11-24 (site #340). Epic 4 is not built.
 > Last updated 2026-11-24.
 > **Repo:** `C-Vac/goblin-democracy`, a git submodule of the site monorepo at `packages/democracy`.
 > **Route:** `www.goblinlife.org/democracy` (static Vite build copied into `apps/www/public/democracy` at www build time).
@@ -204,7 +204,7 @@ with that election's own preview card (Epic 3). Either form opens the election; 
 - Palette: violet, aqua, yellow, magenta, green (validated for colour-blind separation in both themes); no red
   against blue. Light and dark follow the site's `gl_color_scheme` cookie, else the device.
 
-### Epic 3: Hosting on www — ✅ Completed (v0.1 live 2026-11-17); share cards 🔄 In Progress (v0.2 site PR)
+### Epic 3: Hosting on www — ✅ Completed (v0.1 live 2026-11-17, #318); share cards ✅ Completed (2026-11-24, #340)
 - Site monorepo: submodule at `packages/democracy`; `apps/www/scripts/build-democracy.mjs` builds it into
   `apps/www/public/democracy` before `next build`; rewrite `/democracy` to the built `index.html`.
 - Squash-merge site changes that only bump the submodule with `Deploy-Apps: www`.
